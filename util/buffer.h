@@ -31,6 +31,8 @@ void buffer_append_one(buffer_t *buffer, char c);
 
 size_t buffer_length(buffer_t *buffer);
 
+bool buffer_empty(buffer_t *buffer);
+
 void buffer_defrag(buffer_t *buffer);
 
 void buffer_destroy(buffer_t *buffer);

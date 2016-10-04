@@ -50,13 +50,24 @@ size_t buffer_length(buffer_t *buffer) {
     return length;
 }
 
+bool buffer_empty(buffer_t *buffer) {
+    return !(*buffer && (*buffer)->length);
+}
+
 void buffer_defrag(buffer_t *buffer) {
     buffer_t *new = buffer_create_size(buffer_length(buffer));
-    size_t pos = 0;
     for (size_t pos = 0; *buffer; buffer = &(*buffer)->next) {
         memcpy((char *)(*new +1) + pos, *buffer + 1, (*buffer)->length);
         pos += (*buffer)->length;
     }
+    buffer_t ptr = *buffer;
+    while (ptr) {
+        buffer_t next = ptr->next;
+        free(ptr);
+        ptr = next;
+    }
+    *buffer = *new;
+    free(new);
 }
 
 void buffer_destroy(buffer_t *buffer) {
@@ -66,5 +77,5 @@ void buffer_destroy(buffer_t *buffer) {
         free(ptr);
         ptr = next;
     }
-    *buffer = NULL;
+    free(buffer);
 }
