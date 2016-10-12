@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-enum pragma_type_t : uint8_t {
+enum pragma_type_t {
     PRAGMA_NONE,
 };
 
