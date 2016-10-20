@@ -7,6 +7,7 @@
 struct buffer_node_t {
     size_t length;
     struct buffer_node_t *next;
+    char data[0];
 };
 
 struct buffer_iterator_t {

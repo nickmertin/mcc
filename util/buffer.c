@@ -16,14 +16,14 @@ buffer_t *buffer_create_size(size_t size) {
 }
 
 struct buffer_iterator_t buffer_iterate(buffer_t *buffer) {
-    return (struct buffer_iterator_t) { .current = (char *) (buffer + sizeof(struct buffer_node_t)), .remaining = (*buffer)->length, .next = (*buffer)->next };
+    return (struct buffer_iterator_t) { .current = (*buffer)->data, .remaining = (*buffer)->length, .next = (*buffer)->next };
 }
 
 bool buffer_iterator_next(struct buffer_iterator_t *iterator) {
     if (!--iterator->remaining) {
         if (!iterator->next)
             return false;
-        *iterator = (struct buffer_iterator_t) {.current = (char *) (iterator->next + sizeof(struct buffer_node_t)), .remaining = iterator->next->length, .next = iterator->next->next};
+        *iterator = (struct buffer_iterator_t) {.current = iterator->next->data, .remaining = iterator->next->length, .next = iterator->next->next};
     }
     return true;
 }
