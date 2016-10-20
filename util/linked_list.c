@@ -1,6 +1,7 @@
-#include "linked_list.h"
 #include <malloc.h>
 #include <memory.h>
+#include "linked_list.h"
+#include "misc.h"
 
 linked_list_t *linked_list_create() {
     linked_list_t *list = malloc(sizeof(linked_list_t));
@@ -22,7 +23,7 @@ bool linked_list_insert(linked_list_t *list, size_t i, void *data, size_t size) 
         return false;
     struct linked_list_node_t *new = malloc(sizeof(struct linked_list_node_t) + size);
     new->ptr = (struct linked_list_node_t *) ((uintptr_t) last ^ (uintptr_t) node);
-    memcpy(new + 1, data, size);
+    memcpy(new->data, data, size);
     if (last)
         last->ptr = (struct linked_list_node_t *) ((uintptr_t) last->ptr ^ (uintptr_t) node ^ (uintptr_t) new);
     if (node)
@@ -63,6 +64,29 @@ size_t linked_list_size(linked_list_t *list) {
         ++count;
     }
     return count;
+}
+
+void linked_list_reverse(linked_list_t *list) {
+    if (!list)
+        return;
+    struct linked_list_node_t *last = 0, *current = *list;
+    while (current) {
+        struct linked_list_node_t *next = current->ptr;
+        current->ptr = last;
+        last = current;
+        current = next;
+    }
+    (*list)->ptr = last;
+}
+
+void linked_list_foreach(linked_list_t *list, void (*consumer)(void *)) {
+    if (!list)
+        return;
+    struct linked_list_node_t *current = *list;
+    while (current) {
+        consumer(current->data);
+        current = current->ptr;
+    }
 }
 
 void linked_list_destroy(linked_list_t *list) {
