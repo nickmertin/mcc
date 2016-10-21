@@ -400,62 +400,9 @@ static void regex_match_internal(linked_list_t *data, void **state) {
     struct __regex_result_t **result = state[1];
     if (*result)
         return;
-    struct stack_frame_t {
-        size_t len, range, total;
-    };
-    linked_list_t *stack = linked_list_create();
-    struct stack_frame_t frame;
-    struct linked_list_node_t *node = *data, *next;
-    while (node) {
-        next = node->ptr;
-        struct regex_element_t *element = (struct regex_element_t *) node->data, *next_e = next ? (struct regex_element_t *) next->data : NULL;
-        switch (element->type) {
-            case RE_MAYBE:
-            case RE_MANY:
-            case RE_MULTIPLE:
-                return;
-            default: {
-                enum regex_mode_t mode = MODE_NORMAL;
-                if (next) {
-                    if (next_e->type == RE_MAYBE)
-                        mode = MODE_MAYBE;
-                    else if (next_e->type == RE_MULTIPLE)
-                        mode = MODE_MULTIPLE;
-                    else if (next_e->type == RE_MANY)
-                        mode = MODE_MANY;
-                    else
-                        goto cont;
-                    if ((next = next->ptr)) {
-                        next_e = (struct regex_element_t *) next->data;
-                        if (next_e->type == RE_MAYBE) {
-                            mode |= MODE_LAZY;
-                            next = next->ptr;
-                        }
-                    }
-                }
-                cont:
-                for (size_t i = frame.len; i <= frame.len + frame.range; ++i)
-                    switch (element->type) {
-                        case RE_ANY:
-                            if ((mode == MODE_NORMAL || mode | MODE_MULTIPLE) && !text[i])
-                                continue;
-                            if (mode | MODE_MULTIPLE || mode | MODE_MANY) {
-                                linked_list_insert(stack, 0, &frame, sizeof(struct stack_frame_t));
-                                frame.range = frame.total - frame.len;
-                            }
-                            break;
-                        case RE_CHARSET:
-                            if ((mode == MODE_NORMAL || mode | MODE_MULTIPLE) && !(text[i] && getFlag(element->data, (size_t) text[i])))
-                                continue;
-                            if (mode | MODE_MULTIPLE || mode | MODE_MANY) {
-                                //TODO: make recursive
-                            }
-                            break;
-                    }
-            }
-        }
-        node = next;
-    }
+    const char **se = malloc(sizeof(const char *));
+    *se = NULL;
+    *result = regex_match_element(text, *data, 0, se);
 }
 
 char *__regex_replace(const char *expr, const char *text, const char *value) {
