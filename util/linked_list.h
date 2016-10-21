@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include "delegate.h"
 
 struct linked_list_node_t {
     struct linked_list_node_t *ptr;
@@ -22,7 +23,7 @@ size_t linked_list_size(linked_list_t *list);
 
 void linked_list_reverse(linked_list_t *list);
 
-void linked_list_foreach(linked_list_t *list, void (*consumer)(void *));
+void linked_list_foreach(linked_list_t *list, struct delegate_t consumer);
 
 void linked_list_destroy(linked_list_t *list);
 

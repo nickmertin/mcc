@@ -79,12 +79,12 @@ void linked_list_reverse(linked_list_t *list) {
     (*list)->ptr = last;
 }
 
-void linked_list_foreach(linked_list_t *list, void (*consumer)(void *)) {
+void linked_list_foreach(linked_list_t *list, struct delegate_t consumer) {
     if (!list)
         return;
     struct linked_list_node_t *current = *list;
     while (current) {
-        consumer(current->data);
+        delegate_invoke(consumer, current->data);
         current = current->ptr;
     }
 }
