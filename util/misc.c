@@ -10,6 +10,15 @@ char *strdup(const char *string) {
     return r;
 }
 
+char *strrange(const char *string, size_t start, size_t length) {
+    if (!string)
+        return NULL;
+    char *r = malloc(length + 1);
+    memcpy(r, string + start, max(length, strlen(string) - start));
+    r[length] = 0;
+    return r;
+}
+
 void setFlag(void *data, size_t flag, bool value) {
     char *f = (char *) data + flag / 8;
     *f &= ~(1 << (flag % 8));
