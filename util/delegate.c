@@ -5,7 +5,7 @@ static void wrapper(void *data, void *state) {
 }
 
 struct delegate_t delegate_wrap(void (*func)(void *)) {
-    return { .func = &wrapper, .state = func };
+    return (struct delegate_t) {.func = &wrapper, .state = func};
 }
 
 void delegate_invoke(struct delegate_t delegate, void *data) {
