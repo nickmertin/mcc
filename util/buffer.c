@@ -24,7 +24,8 @@ bool buffer_iterator_next(struct buffer_iterator_t *iterator) {
         if (!iterator->next)
             return false;
         *iterator = (struct buffer_iterator_t) {.current = iterator->next->data, .remaining = iterator->next->length, .next = iterator->next->next};
-    }
+    } else
+        ++iterator->current;
     return true;
 }
 
@@ -34,7 +35,7 @@ void buffer_append(buffer_t *buffer, const char *data, size_t length) {
     *buffer = malloc(sizeof(struct buffer_node_t) + length);
     (*buffer)->next = NULL;
     (*buffer)->length = length;
-    memcpy(*buffer + 1, data, length);
+    memcpy((*buffer)->data, data, length);
 }
 
 void buffer_append_one(buffer_t *buffer, char c) {
