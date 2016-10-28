@@ -459,10 +459,16 @@ char *__regex_replace(const char *expr, const char *text, const char *value) {
 
 }
 
-struct __regex_result_t *__regex_find(const char *expr, const char *text) {
+struct __regex_find_result_t *__regex_find(const char *expr, const char *text) {
     struct __regex_result_t *result;
-    while (!(result = __regex_match(expr, text)));
-    return result;
+    while (!(result = __regex_match(expr, text))) {
+        if (!text++)
+            return NULL;
+    }
+    struct __regex_find_result_t *fr = malloc(sizeof(struct __regex_find_result_t) + sizeof(const char *) * result->se_count);
+    fr->string = text;
+    memcpy(&fr->info, result, sizeof(struct __regex_result_t) + sizeof(const char *) * result->se_count);
+    return fr;
 }
 
 struct __regex_result_t *__regex_match(const char *expr, const char *text) {
