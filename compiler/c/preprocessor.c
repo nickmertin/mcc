@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <ctype.h>
-#include "controller.h"
-#include "../util/buffer.h"
-#include "../util/misc.h"
+#include "preprocessor.h"
+#include "../../util/buffer.h"
+#include "../../util/misc.h"
 
 struct macro_t {
     char *params;
