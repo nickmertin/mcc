@@ -3,5 +3,5 @@ project(ISU)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11")
 
-set(SOURCE_FILES main.c parser/load.c parser/load.h preprocessor/controller.c preprocessor/controller.h util/buffer.c util/buffer.h util/misc.h util/dictionary.c util/dictionary.h util/misc.c util/regex.c util/regex.h util/linked_list.c util/linked_list.h util/delegate.c util/delegate.h)
+set(SOURCE_FILES main.c preprocessor/controller.c preprocessor/controller.h util/buffer.c util/buffer.h util/misc.h util/dictionary.c util/dictionary.h util/misc.c util/regex.c util/regex.h util/linked_list.c util/linked_list.h util/delegate.c util/delegate.h)
 add_executable(mcc ${SOURCE_FILES})
