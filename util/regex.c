@@ -455,19 +455,49 @@ static void regex_match_internal(linked_list_t *data, void **state) {
     linked_list_destroy(data);
 }
 
-char *__regex_replace(const char *expr, const char *text, const char *value) {
+static void add(char **data, size_t *state) {
+    *state += strlen(*data);
+}
 
+static void concat(char **data, char *state) {
+    strcat(state, *data);
+}
+
+char *__regex_replace(const char *expr, const char *text, const char *value) {
+    linked_list_t *list = linked_list_create();
+    struct __regex_find_result_t *result;
+    while (*text && (result = __regex_find(expr, text))) {
+        if (result->string != text) {
+            char *segment = strrange(text, 0, result->string - text);
+            linked_list_insert(list, 0, &segment, sizeof(char *));
+        }
+        if (result->info.length) {
+            char *segment = strrange(result->string, 0, result->info.length);
+            linked_list_insert(list, 0, &segment, sizeof(char *));
+        }
+        text = result->string + result->info.length;
+    }
+    if (*text)
+        linked_list_insert(list, 0, &text, sizeof(char *));
+    linked_list_reverse(list);
+    size_t len = 0;
+    linked_list_foreach(list, (struct delegate_t) {.func = (void (*)(void *, void *)) &add, .state = &len});
+    char *output = malloc(len + 1);
+    *output = 0;
+    linked_list_foreach(list, (struct delegate_t) {.func = (void (*)(void *, void *)) &concat, .state = output});
+    linked_list_destroy(list);
+    return output;
 }
 
 struct __regex_find_result_t *__regex_find(const char *expr, const char *text) {
     struct __regex_result_t *result;
-    while (!(result = __regex_match(expr, text))) {
+    while (!(result = __regex_match(expr, text)))
         if (!text++)
             return NULL;
-    }
     struct __regex_find_result_t *fr = malloc(sizeof(struct __regex_find_result_t) + sizeof(const char *) * result->se_count);
     fr->string = text;
     memcpy(&fr->info, result, sizeof(struct __regex_result_t) + sizeof(const char *) * result->se_count);
+    free(result);
     return fr;
 }
 
