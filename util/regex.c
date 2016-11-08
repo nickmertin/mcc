@@ -470,12 +470,14 @@ static void free_target(void **data) {
 char *__regex_replace(const char *expr, const char *text, const char *value) {
     linked_list_t *list = linked_list_create();
     struct __regex_find_result_t *result;
+    char *segment;
     while (*text && (result = __regex_find(expr, text))) {
         if (result->string != text) {
-            char *segment = strrange(text, 0, result->offset);
+            segment = strrange(text, 0, result->offset);
             linked_list_insert(list, 0, &segment, sizeof(char *));
         }
-        linked_list_insert(list, 0, &value, sizeof(char *));
+        segment = strdup(value);
+        linked_list_insert(list, 0, &segment, sizeof(char *));
         text += result->offset + result->info.length;
     }
     if (*text)
