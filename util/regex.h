@@ -10,6 +10,7 @@ struct __regex_result_t {
 
 struct __regex_find_result_t {
     const char *string;
+    size_t offset;
     struct __regex_result_t info;
 };
 

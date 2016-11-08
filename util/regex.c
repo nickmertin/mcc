@@ -468,14 +468,11 @@ char *__regex_replace(const char *expr, const char *text, const char *value) {
     struct __regex_find_result_t *result;
     while (*text && (result = __regex_find(expr, text))) {
         if (result->string != text) {
-            char *segment = strrange(text, 0, result->string - text);
+            char *segment = strrange(text, 0, result->offset);
             linked_list_insert(list, 0, &segment, sizeof(char *));
         }
-        if (result->info.length) {
-            char *segment = strrange(result->string, 0, result->info.length);
-            linked_list_insert(list, 0, &segment, sizeof(char *));
-        }
-        text = result->string + result->info.length;
+        linked_list_insert(list, 0, &value, sizeof(char *));
+        text += result->offset + result->info.length;
     }
     if (*text)
         linked_list_insert(list, 0, &text, sizeof(char *));
@@ -490,14 +487,16 @@ char *__regex_replace(const char *expr, const char *text, const char *value) {
 }
 
 struct __regex_find_result_t *__regex_find(const char *expr, const char *text) {
+    size_t off = 0;
     struct __regex_result_t *result;
     while (!(result = __regex_match(expr, text)))
-        if (!text++)
+        if (!(off++, text++))
             return NULL;
     struct __regex_find_result_t *fr = malloc(sizeof(struct __regex_find_result_t) + sizeof(const char *) * result->se_count);
     fr->string = text;
     memcpy(&fr->info, result, sizeof(struct __regex_result_t) + sizeof(const char *) * result->se_count);
     free(result);
+    fr->offset = off;
     return fr;
 }
 
