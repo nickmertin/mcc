@@ -463,6 +463,10 @@ static void concat(char **data, char *state) {
     strcat(state, *data);
 }
 
+static void free_target(void **data) {
+    free(*data);
+}
+
 char *__regex_replace(const char *expr, const char *text, const char *value) {
     linked_list_t *list = linked_list_create();
     struct __regex_find_result_t *result;
@@ -482,6 +486,7 @@ char *__regex_replace(const char *expr, const char *text, const char *value) {
     char *output = malloc(len + 1);
     *output = 0;
     linked_list_foreach(list, (struct delegate_t) {.func = (void (*)(void *, void *)) &concat, .state = output});
+    linked_list_foreach(list, delegate_wrap((void (*)(void *)) &free_target));
     linked_list_destroy(list);
     return output;
 }
