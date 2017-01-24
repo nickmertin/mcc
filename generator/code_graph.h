@@ -78,7 +78,7 @@ enum cg_statement_type {
     CG_LABEL,
     CG_ASSIGN,
     CG_CALL,
-    CG_RETURN,
+    CG_ENDFUNC,
     CG_CUSTOM,
 };
 
@@ -101,11 +101,24 @@ struct cg_statement_assign {
     struct cg_expression expr;
 };
 
+struct cg_statement_call {
+    char *name;
+    size_t *args;
+    size_t arg_count;
+    size_t out;
+};
+
+struct cg_statement_endfunc {
+    size_t var;
+};
+
 union cg_statement_data {
     struct cg_statement_ifelse ifelse;
     struct cg_statement_jump jump;
     struct cg_statement_label label;
     struct cg_statement_assign assign;
+    struct cg_statement_call call;
+    struct cg_statement_endfunc endfunc;
     void *custom;
 };
 
@@ -123,6 +136,11 @@ struct cg_function {
     char *name;
     size_t arg_count;
     struct cg_block body;
+};
+
+struct cg_file_graph {
+    struct cg_function *functions;
+    size_t  function_count;
 };
 
 #endif //ISU_CODE_GRAPH_H
