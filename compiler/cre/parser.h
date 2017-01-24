@@ -37,6 +37,11 @@ struct cre_expression {
     size_t token_count;
 };
 
-struct cre_expression **parse(const char *source, size_t *count);
+struct cre_parsed_file {
+    struct cre_expression *expressions;
+    size_t expression_count;
+};
+
+struct cre_parsed_file *parse(const char *source, size_t *count);
 
 #endif //ISU_PARSER_H

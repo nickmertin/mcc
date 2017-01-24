@@ -10,8 +10,9 @@ static void copy_to_array(void *data, void *state) {
     ++*out;
 }
 
-struct cre_expression **parse(const char *source, size_t *count) {
-    struct cre_expression **result = NULL;
+struct cre_parsed_file *parse(const char *source, size_t *count) {
+    struct cre_parsed_file *result = NULL;
+    void *state[1];
     char *src = strdup(source);
     linked_list_t *expressions = linked_list_create();
     while (*source) {
@@ -25,7 +26,7 @@ struct cre_expression **parse(const char *source, size_t *count) {
         }
         while ((find = __regex_find("([a-zA-Z_]+)[ \t]*\\(([^()]*)\\)", line))) {
             struct cre_attribute a = {.label = find->info.se[0], .data = find->info.se[1]};
-            linked_list_insert(attributes, 0, &a, sizeof(struct cre_attribute));
+            linked_list_insert(attributes, 0, &a, sizeof(struct cre_attribute));struct
             free(find);
             line += find->offset + find->info.length;
         }
@@ -92,7 +93,6 @@ struct cre_expression **parse(const char *source, size_t *count) {
             }
             linked_list_insert(tokens, 0, &token, sizeof(struct cre_token));
         }
-        void *state[1];
         struct cre_expression expr = {.token_count = linked_list_size(tokens), .attribute_count = linked_list_size(attributes)};
         linked_list_reverse(tokens);
         expr.tokens = malloc(sizeof(struct cre_token) * expr.token_count);
@@ -107,7 +107,14 @@ struct cre_expression **parse(const char *source, size_t *count) {
         expr.name = find->info.se[0];
         linked_list_insert(expressions, 0, &expr, sizeof(struct cre_expression));
     }
+    linked_list_reverse(expressions);
+    result = malloc(sizeof(struct cre_parsed_file));
+    result->expression_count = linked_list_size(expressions);
+    result->expressions = malloc(sizeof(struct cre_expression) * result->expression_count);
+    *state = result->expressions;
+    linked_list_foreach(expressions, (struct delegate_t) {.func = &copy_to_array, .state = &state});
     end:
     free(src);
+    linked_list_destroy(expressions);
     return result;
 }
