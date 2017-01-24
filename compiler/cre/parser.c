@@ -4,15 +4,10 @@
 #include "../../util/regex.h"
 #include "../../util/misc.h"
 
-static void copy_to_array(void *data, void *state) {
-    void ***out = (void ***)state;
-    (**out) = data;
-    ++*out;
-}
-
 struct cre_parsed_file *parse(const char *source, size_t *count) {
     struct cre_parsed_file *result = NULL;
-    void *state[1];
+    void *state[2];
+    state[0] = &state[1];
     char *src = strdup(source);
     linked_list_t *expressions = linked_list_create();
     while (*source) {
@@ -96,13 +91,13 @@ struct cre_parsed_file *parse(const char *source, size_t *count) {
         struct cre_expression expr = {.token_count = linked_list_size(tokens), .attribute_count = linked_list_size(attributes)};
         linked_list_reverse(tokens);
         expr.tokens = malloc(sizeof(struct cre_token) * expr.token_count);
-        *state = expr.tokens;
-        linked_list_foreach(tokens, (struct delegate_t) {.func = &copy_to_array, .state = &state});
+        state[1] = expr.tokens;
+        linked_list_foreach(tokens, (struct delegate_t) {.func = &copy_to_array, .state = state});
         linked_list_destroy(tokens);
         linked_list_reverse(attributes);
         expr.attributes = malloc(sizeof(struct cre_attribute) * expr.attribute_count);
-        *state = expr.attributes;
-        linked_list_foreach(attributes, (struct delegate_t) {.func = &copy_to_array, .state = &state});
+        state[1] = expr.attributes;
+        linked_list_foreach(attributes, (struct delegate_t) {.func = &copy_to_array, .state = state});
         linked_list_destroy(attributes);
         expr.name = find->info.se[0];
         linked_list_insert(expressions, 0, &expr, sizeof(struct cre_expression));
@@ -111,8 +106,8 @@ struct cre_parsed_file *parse(const char *source, size_t *count) {
     result = malloc(sizeof(struct cre_parsed_file));
     result->expression_count = linked_list_size(expressions);
     result->expressions = malloc(sizeof(struct cre_expression) * result->expression_count);
-    *state = result->expressions;
-    linked_list_foreach(expressions, (struct delegate_t) {.func = &copy_to_array, .state = &state});
+    state[1] = result->expressions;
+    linked_list_foreach(expressions, (struct delegate_t) {.func = &copy_to_array, .state = state});
     end:
     free(src);
     linked_list_destroy(expressions);

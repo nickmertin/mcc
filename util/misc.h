@@ -21,4 +21,6 @@ void setFlag(void *data, size_t flag, bool value);
 
 bool getFlag(void *data, size_t flag);
 
+void copy_to_array(void *data, void *state);
+
 #endif //ISU_MISC_H

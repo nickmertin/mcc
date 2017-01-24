@@ -29,3 +29,9 @@ void setFlag(void *data, size_t flag, bool value) {
 bool getFlag(void *data, size_t flag) {
     return (bool) (((char *) data)[flag / 8] & (1 << (flag % 8)));
 }
+
+void copy_to_array(void *data, void *state) {
+    void ***out = (void ***)state;
+    (**out) = data;
+    ++*out;
+}
