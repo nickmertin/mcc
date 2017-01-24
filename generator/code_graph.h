@@ -2,13 +2,19 @@
 #define ISU_CODE_GRAPH_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 enum cg_expression_type {
     CG_VAR,
+    CG_VALUE,
     CG_UNARY,
     CG_BINARY,
     CG_TERNARY,
     CG_CUSTOM,
+};
+
+struct cg_expression_value {
+    size_t value;
 };
 
 enum cg_expression_unary_type {
@@ -62,9 +68,11 @@ struct cg_expression_ternary {
 
 union cg_expression_data {
     size_t var;
+    struct cg_expression_value value;
     struct cg_expression_unary unary;
     struct cg_expression_binary binary;
     struct cg_expression_ternary ternary;
+    void *custom;
 };
 
 struct cg_expression {
@@ -89,11 +97,11 @@ struct cg_statement_ifelse {
 };
 
 struct cg_statement_jump {
-    char *label;
+    const char *label;
 };
 
 struct cg_statement_label {
-    char *label;
+    const char *label;
 };
 
 struct cg_statement_assign {
@@ -102,7 +110,7 @@ struct cg_statement_assign {
 };
 
 struct cg_statement_call {
-    char *name;
+    const char *name;
     size_t *args;
     size_t arg_count;
     size_t out;
@@ -128,12 +136,14 @@ struct cg_statement {
 };
 
 struct cg_block {
+    bool new_namespace;
     struct cg_statement *statemets;
     size_t statement_count;
 };
 
 struct cg_function {
-    char *name;
+    const char *name;
+    uint8_t access_level;
     size_t arg_count;
     struct cg_block body;
 };
