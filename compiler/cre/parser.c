@@ -1,5 +1,6 @@
 #include "parser.h"
 #include <malloc.h>
+#include <memory.h>
 #include "../../util/linked_list.h"
 #include "../../util/regex.h"
 #include "../../util/misc.h"
@@ -21,7 +22,7 @@ struct cre_parsed_file *parse(const char *source, size_t *count) {
         }
         while ((find = __regex_find("([a-zA-Z_]+)[ \t]*\\(([^()]*)\\)", line))) {
             struct cre_attribute a = {.label = find->info.se[0], .data = find->info.se[1]};
-            linked_list_insert(attributes, 0, &a, sizeof(struct cre_attribute));struct
+            linked_list_insert(attributes, 0, &a, sizeof(struct cre_attribute));
             free(find);
             line += find->offset + find->info.length;
         }
