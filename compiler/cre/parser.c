@@ -5,7 +5,7 @@
 #include "../../util/regex.h"
 #include "../../util/misc.h"
 
-struct cre_parsed_file *parse(const char *source, size_t *count) {
+struct cre_parsed_file *parse(const char *source) {
     struct cre_parsed_file *result = NULL;
     void *state[2];
     state[0] = &state[1];
@@ -22,8 +22,8 @@ struct cre_parsed_file *parse(const char *source, size_t *count) {
         }
         while ((find = __regex_find("([a-zA-Z_]+)[ \t]*\\(([^()]*)\\)", line))) {
             struct cre_attribute a = {.label = find->info.se[0], .data = find->info.se[1]};
-            linked_list_insert(attributes, 0, &a, sizeof(struct cre_attribute));
             free(find);
+            linked_list_insert(attributes, 0, &a, sizeof(struct cre_attribute));
             line += find->offset + find->info.length;
         }
         find = __regex_find("([a-zA-Z_]+)[ \t]*@(.*)$", line);

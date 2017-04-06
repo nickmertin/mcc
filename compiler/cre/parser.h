@@ -42,6 +42,6 @@ struct cre_parsed_file {
     size_t expression_count;
 };
 
-struct cre_parsed_file *parse(const char *source, size_t *count);
+struct cre_parsed_file *parse(const char *source);
 
 #endif //ISU_PARSER_H
