@@ -93,5 +93,5 @@ void linked_list_destroy(linked_list_t *list) {
         node = node->ptr;
         free(c);
     }
-
+    free(list);
 }
