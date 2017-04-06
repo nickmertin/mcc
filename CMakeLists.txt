@@ -7,7 +7,9 @@ set(SOURCE_FILES util/buffer.c util/buffer.h util/misc.h util/dictionary.c util/
 
 set(SOURCE_LINUX_X86 generator/linux-x86/generator.c generator/linux-x86/generator.h)
 
+set(SOURCE_CRE compiler/cre/parser.c compiler/cre/parser.h compiler/cre/grapher.c compiler/cre/grapher.h)
+
 add_executable(mcc ${SOURCE_FILES} main.c)
 add_executable(mcc-c ${SOURCE_FILES} ${SOURCE_LINUX_X86} compiler/c/preprocessor.c compiler/c/preprocessor.h)
-add_executable(mcc-cre ${SOURCE_FILES} ${SOURCE_LINUX_X86} compiler/cre/parser.c compiler/cre/parser.h compiler/cre/grapher.c compiler/cre/grapher.h)
+add_executable(mcc-cre-linux-x86 ${SOURCE_FILES} ${SOURCE_LINUX_X86} ${SOURCE_CRE} launchers/cre-linux-x86.c)
 add_executable(mcc-regex-test ${SOURCE_FILES} test/regex-test.c)
