@@ -14,7 +14,7 @@ char *strrange(const char *string, size_t start, size_t length) {
     if (!string)
         return NULL;
     char *r = malloc(length + 1);
-    memcpy(r, string + start, max(length, strlen(string) - start));
+    memcpy(r, string + start, min(length, strlen(string) - start));
     r[length] = 0;
     return r;
 }

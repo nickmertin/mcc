@@ -5,15 +5,14 @@
 #include "../../util/regex.h"
 #include "../../util/misc.h"
 
-struct cre_parsed_file *parse(const char *source) {
+struct cre_parsed_file *parse(char *source) {
     struct cre_parsed_file *result = NULL;
     void *state[2];
     state[0] = &state[1];
-    char *src = strdup(source);
     linked_list_t *expressions = linked_list_create();
     while (*source) {
         linked_list_t *attributes = linked_list_create();
-        char *line = src;
+        char *line = source;
         struct __regex_find_result_t *find = __regex_find("\r?\n", line);
         if (find) {
             line[find->offset] = 0;
@@ -110,7 +109,7 @@ struct cre_parsed_file *parse(const char *source) {
     state[1] = result->expressions;
     linked_list_foreach(expressions, (struct delegate_t) {.func = &copy_to_array, .state = state});
     end:
-    free(src);
+    free(source);
     linked_list_destroy(expressions);
     return result;
 }

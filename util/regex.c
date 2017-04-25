@@ -199,7 +199,7 @@ static linked_list_t *parse(const char *expr) {
                 break;
             case '|':
                 linked_list_reverse(list);
-                linked_list_insert(master, 0, list, sizeof(linked_list_t));
+                linked_list_insert(master, 0, &list, sizeof(linked_list_t *));
                 free(list);
                 list = linked_list_create();
                 break;
@@ -216,7 +216,7 @@ static linked_list_t *parse(const char *expr) {
         }
     }
     linked_list_reverse(list);
-    linked_list_insert(master, 0, list, sizeof(linked_list_t));
+    linked_list_insert(master, 0, &list, sizeof(linked_list_t *));
     linked_list_reverse(master);
     return master;
     error:
@@ -228,7 +228,7 @@ static linked_list_t *parse(const char *expr) {
     return NULL;
 }
 
-static void regex_match_internal(linked_list_t *data, void **state);
+static void regex_match_internal(linked_list_t **data, void **state);
 
 static struct __regex_result_t *regex_match_element(const char *text, struct linked_list_node_t *node, size_t  offset, const char **subexpressions) {
     if (!node) {
@@ -308,7 +308,7 @@ static struct __regex_result_t *regex_match_element(const char *text, struct lin
                     mode &= ~MODE_LAZY;
                     return mode == MODE_MAYBE ? regex_match_element(text, next, offset, subexpressions) : NULL;
                 case RE_CHARSET:
-                    if ((mode == MODE_NORMAL || mode & ~MODE_LAZY == MODE_MULTIPLE) && !(*text && getFlag(element->data, (size_t) *text)))
+                    if ((mode == MODE_NORMAL || mode & ~MODE_LAZY == MODE_MULTIPLE) && !(*text && getFlag(element->data, (size_t) *(unsigned char *) text)))
                         return NULL;
                     if (mode & ~MODE_LAZY == MODE_MULTIPLE) {
                         ++offset;
@@ -334,7 +334,7 @@ static struct __regex_result_t *regex_match_element(const char *text, struct lin
                                     return result;
                             }
                     }
-                    if (*text && getFlag(element->data, (size_t) *text)) {
+                    if (*text && getFlag(element->data, (size_t) *(unsigned char *) text)) {
                         if (mode & MODE_MAYBE == MODE_MAYBE && mode & MODE_LAZY) {
                             struct __regex_result_t *result = regex_match_element(text, next, offset, subexpressions);
                             if (result)
@@ -448,15 +448,15 @@ static struct __regex_result_t *regex_match_element(const char *text, struct lin
     return NULL;
 }
 
-static void regex_match_internal(linked_list_t *data, void **state) {
+static void regex_match_internal(linked_list_t **data, void **state) {
     const char *text = state[0];
     struct __regex_result_t **result = state[1];
     if (*result)
         return;
     const char **se = malloc(sizeof(const char *));
     *se = NULL;
-    *result = regex_match_element(text, *data, 0, se);
-    linked_list_destroy(data);
+    *result = regex_match_element(text, **data, 0, se);
+    linked_list_destroy(*data);
 }
 
 static void add(char **data, size_t *state) {
@@ -501,7 +501,7 @@ struct __regex_find_result_t *__regex_find(const char *expr, const char *text) {
     size_t off = 0;
     struct __regex_result_t *result;
     while (!(result = __regex_match(expr, text)))
-        if (!(off++, text++))
+        if (!(++off, ++text))
             return NULL;
     struct __regex_find_result_t *fr = malloc(sizeof(struct __regex_find_result_t) + sizeof(const char *) * result->se_count);
     fr->string = text;
