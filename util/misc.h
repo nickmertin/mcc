@@ -2,6 +2,7 @@
 #define ISU_MISC_H
 
 #include <stdbool.h>
+#include "linked_list.h"
 
 #define isalnum_(c) (isalnum(c) || (c) == '_')
 
@@ -21,6 +22,6 @@ void setFlag(void *data, size_t flag, bool value);
 
 bool getFlag(void *data, size_t flag);
 
-void copy_to_array(void *data, void *state);
+void copy_to_array(linked_list_t *list, void *array, size_t step);
 
 #endif //ISU_MISC_H

@@ -2,6 +2,16 @@
 #include <memory.h>
 #include "misc.h"
 
+struct copy_to_array_internal_state_t {
+    char *array;
+    size_t step;
+};
+
+static void copy_to_array_internal(void *data, struct copy_to_array_internal_state_t *state) {
+    memcpy(state->array, data, state->step);
+    state->array += state->step;
+}
+
 char *strdup(const char *string) {
     if (!string)
         return NULL;
@@ -30,8 +40,7 @@ bool getFlag(void *data, size_t flag) {
     return (bool) (((char *) data)[flag / 8] & (1 << (flag % 8)));
 }
 
-void copy_to_array(void *data, void *state) {
-    void ***out = (void ***)state;
-    (**out) = data;
-    ++*out;
+void copy_to_array(linked_list_t *list, void *array, size_t step) {
+    struct copy_to_array_internal_state_t state = { .array = array, .step = step };
+    linked_list_foreach(list, (struct delegate_t) { .func = (void (*)(void *, void *)) &copy_to_array_internal, .state = &state });
 }

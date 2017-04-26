@@ -19,7 +19,7 @@ int main() {
         len = strlen(text);
         if (len)
             text[len - 1] = 0;
-        char *replaced = __regex_replace(regex, text, "REGEX");
+        /*char *replaced = __regex_replace(regex, text, "REGEX");
         struct __regex_find_result_t *result = __regex_find(regex, text);
         if (result) {
             text[(result->string - text) + result->info.length] = 0;
@@ -30,7 +30,15 @@ int main() {
         else
             printf("Not a match\n");
         printf("%s\n", replaced);
-        free(replaced);
+        free(replaced);*/
+        struct __regex_result_t *result = __regex_match(regex, text);
+        if (result) {
+            printf("Match (%lu)\n", result->length);
+            for (size_t i = 0; i < result->se_count; ++i)
+                printf("%s\n", result->se[i]);
+            free(result);
+        } else
+            printf("No match\n");
     }
 #pragma clang diagnostic pop
 }

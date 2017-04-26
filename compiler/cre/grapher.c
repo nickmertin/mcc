@@ -53,10 +53,7 @@ static struct cg_block *generate_match_function(struct cre_token *tokens, size_t
     result = malloc(sizeof(struct cg_block));
     *result = (struct cg_block) {.new_namespace = false, .statement_count = linked_list_size(statements)};
     result->statemets = malloc(sizeof(struct cg_statement) * result->statement_count);
-    void *state[2];
-    state[0] = &state[1];
-    state[1] = result->statemets;
-    linked_list_foreach(statements, (struct delegate_t) {.func = &copy_to_array, .state = state});
+    copy_to_array(statements, result->statemets, sizeof(struct cg_statement));
 }
 
 static void map_to_match_function(struct cg_function *out, struct cg_block *block, const char *name, uint8_t access) {
