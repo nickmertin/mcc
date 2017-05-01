@@ -24,4 +24,6 @@ bool getFlag(void *data, size_t flag);
 
 void copy_to_array(linked_list_t *list, void *array, size_t step);
 
+bool contains_size_t(linked_list_t *list, size_t value);
+
 #endif //ISU_MISC_H

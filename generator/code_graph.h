@@ -4,10 +4,12 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include "../util/linked_list.h"
 
 struct cg_statement;
 
 enum cg_var_size {
+    CG_VOID,
     CG_BYTE,
     CG_WORD,
     CG_LONG,
@@ -15,14 +17,17 @@ enum cg_var_size {
 };
 
 struct cg_var {
+    size_t index;
+    enum cg_var_size size : 7;
+    bool create : 1;
     size_t id;
-    enum cg_var_size size : 8;
 };
 
 struct cg_block {
-    bool new_namespace;
-    struct cg_statement *statemets;
+    struct cg_statement *statements;
     size_t statement_count;
+    struct cg_var *variables;
+    size_t variable_count;
 };
 
 enum cg_expression_type {
@@ -51,7 +56,7 @@ enum cg_expression_unary_type {
 
 struct cg_expression_unary {
     enum cg_expression_unary_type type : 8;
-    struct cg_var var;
+    size_t var;
 };
 
 enum cg_expression_binary_type {
@@ -76,18 +81,18 @@ enum cg_expression_binary_type {
 
 struct cg_expression_binary {
     enum cg_expression_binary_type type : 8;
-    struct cg_var left_var;
-    struct cg_var right_var;
+    size_t left_var;
+    size_t right_var;
 };
 
 struct cg_expression_ternary {
-    struct cg_var cond_var;
-    struct cg_var true_var;
-    struct cg_var false_var;
+    size_t cond_var;
+    size_t true_var;
+    size_t false_var;
 };
 
 union cg_expression_data {
-    struct cg_var var;
+    size_t var;
     struct cg_expression_value value;
     struct cg_expression_unary unary;
     struct cg_expression_binary binary;
@@ -109,7 +114,7 @@ enum cg_statement_type {
 };
 
 struct cg_statement_ifelse {
-    struct cg_var cond_var;
+    size_t cond_var;
     struct cg_block if_true;
     struct cg_block if_false;
 };
@@ -123,7 +128,7 @@ struct cg_statement_label {
 };
 
 struct cg_statement_assign {
-    struct cg_var var;
+    size_t var;
     struct cg_expression expr;
 };
 
@@ -131,11 +136,11 @@ struct cg_statement_call {
     const char *name;
     struct cg_var *args;
     size_t arg_count;
-    struct cg_var out;
+    size_t out;
 };
 
 struct cg_statement_endfunc {
-    struct cg_var var;
+    size_t var;
 };
 
 union cg_statement_data {
@@ -155,7 +160,9 @@ struct cg_statement {
 struct cg_function {
     const char *name;
     uint8_t access_level;
+    enum cg_var_size *args;
     size_t arg_count;
+    enum cg_var_size return_type;
     struct cg_block body;
 };
 
@@ -163,5 +170,27 @@ struct cg_file_graph {
     struct cg_function *functions;
     size_t  function_count;
 };
+
+struct cg_block_builder {
+    size_t start_index;
+    size_t *next_var;
+    bool root;
+    linked_list_t *statements;
+    linked_list_t *variables;
+};
+
+void block_builder_create_root(struct cg_block_builder *builder, size_t parameter_count);
+
+void block_builder_create_child(struct cg_block_builder *builder, struct cg_block_builder *parent);
+
+void block_builder_add_statement(struct cg_block_builder *builder, struct cg_statement statement);
+
+void block_builder_merge_block(struct cg_block_builder *builder, struct cg_block block);
+
+size_t block_builder_create_variable(struct cg_block_builder *builder, enum cg_var_size size);
+
+void block_builder_destroy_variable(struct cg_block_builder *builder, size_t variable);
+
+void block_builder_end(struct cg_block_builder *builder, struct cg_block *out);
 
 #endif //ISU_CODE_GRAPH_H

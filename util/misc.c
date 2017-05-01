@@ -2,14 +2,23 @@
 #include <memory.h>
 #include "misc.h"
 
-struct copy_to_array_internal_state_t {
+struct copy_to_array_internal_state {
     char *array;
     size_t step;
 };
 
-static void copy_to_array_internal(void *data, struct copy_to_array_internal_state_t *state) {
+struct contains_size_t_internal_state {
+    size_t value;
+    bool found;
+};
+
+static void copy_to_array_internal(void *data, struct copy_to_array_internal_state *state) {
     memcpy(state->array, data, state->step);
     state->array += state->step;
+}
+
+static void contains_size_t_internal(size_t *data, struct contains_size_t_internal_state *state) {
+    state->found |= *data == state->value;
 }
 
 char *strdup(const char *string) {
@@ -41,6 +50,12 @@ bool getFlag(void *data, size_t flag) {
 }
 
 void copy_to_array(linked_list_t *list, void *array, size_t step) {
-    struct copy_to_array_internal_state_t state = { .array = array, .step = step };
-    linked_list_foreach(list, (struct delegate_t) { .func = (void (*)(void *, void *)) &copy_to_array_internal, .state = &state });
+    struct copy_to_array_internal_state state = {.array = array, .step = step};
+    linked_list_foreach(list, (struct delegate_t) {.func = (void (*)(void *, void *)) &copy_to_array_internal, .state = &state});
+}
+
+bool contains_size_t(linked_list_t *list, size_t value) {
+    struct contains_size_t_internal_state state = {.value = value, .found = false};
+    linked_list_foreach(list, (struct delegate_t) {.func = (void (*)(void *, void *)) &contains_size_t_internal, .state = &state});
+    return state.found;
 }
