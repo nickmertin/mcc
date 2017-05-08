@@ -13,3 +13,4 @@ set(SOURCE_CRE compiler/cre/parser.c compiler/cre/parser.h compiler/cre/grapher.
 
 add_executable(mcc-cre-linux-x86 ${SOURCE_FILES} ${SOURCE_LAUNCHER} ${SOURCE_LINUX_X86} ${SOURCE_CRE} launchers/cre-linux-x86.c)
 add_executable(mcc-regex-test ${SOURCE_FILES} test/regex-test.c)
+add_executable(mcc-linux-x86-test ${SOURCE_FILES} ${SOURCE_LINUX_X86} test/linux-x86-test.c)
