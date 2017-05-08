@@ -16,18 +16,9 @@ enum cg_var_size {
     CG_QWORD,
 };
 
-struct cg_var {
-    size_t index;
-    enum cg_var_size size : 7;
-    bool create : 1;
-    size_t id;
-};
-
 struct cg_block {
     struct cg_statement *statements;
     size_t statement_count;
-    struct cg_var *variables;
-    size_t variable_count;
 };
 
 enum cg_expression_type {
@@ -35,7 +26,6 @@ enum cg_expression_type {
     CG_VALUE,
     CG_UNARY,
     CG_BINARY,
-    CG_TERNARY,
 };
 
 struct cg_expression_value {
@@ -85,18 +75,11 @@ struct cg_expression_binary {
     size_t right_var;
 };
 
-struct cg_expression_ternary {
-    size_t cond_var;
-    size_t true_var;
-    size_t false_var;
-};
-
 union cg_expression_data {
     size_t var;
     struct cg_expression_value value;
     struct cg_expression_unary unary;
     struct cg_expression_binary binary;
-    struct cg_expression_ternary ternary;
 };
 
 struct cg_expression {
@@ -111,6 +94,8 @@ enum cg_statement_type {
     CG_ASSIGN,
     CG_CALL,
     CG_ENDFUNC,
+    CG_CREATEVAR,
+    CG_DESTROYVAR,
 };
 
 struct cg_statement_ifelse {
@@ -143,6 +128,15 @@ struct cg_statement_endfunc {
     size_t var;
 };
 
+struct cg_statement_createvar {
+    size_t var;
+    enum cg_var_size size;
+};
+
+struct cg_statement_destroyvar {
+    size_t var;
+};
+
 union cg_statement_data {
     struct cg_statement_ifelse ifelse;
     struct cg_statement_jump jump;
@@ -150,6 +144,8 @@ union cg_statement_data {
     struct cg_statement_assign assign;
     struct cg_statement_call call;
     struct cg_statement_endfunc endfunc;
+    struct cg_statement_createvar createvar;
+    struct cg_statement_destroyvar destroyvar;
 };
 
 struct cg_statement {
@@ -176,7 +172,6 @@ struct cg_block_builder {
     size_t *next_var;
     bool root;
     linked_list_t *statements;
-    linked_list_t *variables;
 };
 
 void block_builder_create_root(struct cg_block_builder *builder, size_t parameter_count);

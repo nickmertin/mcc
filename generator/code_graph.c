@@ -2,13 +2,25 @@
 #include <malloc.h>
 #include "../util/misc.h"
 
+struct block_builder_end_internal_state {
+    struct cg_block_builder *builder;
+    linked_list_t *processed;
+};
+
+void block_builder_end_internal(struct cg_statement *data, struct block_builder_end_internal_state *state) {
+    if (data->type == CG_CREATEVAR) {
+        if (!contains_size_t(state->processed, data->data.createvar.var))
+            block_builder_destroy_variable(state->builder, data->data.createvar.var);
+    } else if (data->type == CG_DESTROYVAR)
+        linked_list_insert(state->processed, 0, &data->data.createvar.var, sizeof(size_t));
+}
+
 void block_builder_create_root(struct cg_block_builder *builder, size_t parameter_count) {
     builder->start_index = 0;
     builder->next_var = malloc(sizeof(size_t));
     *builder->next_var = parameter_count;
     builder->root = true;
     builder->statements = linked_list_create();
-    builder->variables = linked_list_create();
 }
 
 void block_builder_create_child(struct cg_block_builder *builder, struct cg_block_builder *parent) {
@@ -16,7 +28,6 @@ void block_builder_create_child(struct cg_block_builder *builder, struct cg_bloc
     builder->next_var = parent->next_var;
     builder->root = false;
     builder->statements = linked_list_create();
-    builder->variables = parent->variables;
 }
 
 void block_builder_add_statement(struct cg_block_builder *builder, struct cg_statement statement) {
@@ -29,38 +40,24 @@ void block_builder_merge_block(struct cg_block_builder *builder, struct cg_block
 }
 
 size_t block_builder_create_variable(struct cg_block_builder *builder, enum cg_var_size size) {
-    struct cg_var var = { .index = linked_list_size(builder->statements), .size = size, .create = true, .id = (*builder->next_var)++ };
-    linked_list_insert(builder->variables, 0, &var, sizeof(struct cg_var));
-    return var.id;
+    size_t var = (*builder->next_var)++;
+    block_builder_add_statement(builder, (struct cg_statement) {.type = CG_CREATEVAR, .data.createvar = {.size = size, .var = var}});
+    return var;
 }
 
 void block_builder_destroy_variable(struct cg_block_builder *builder, size_t variable) {
-    struct cg_var var = { .index = linked_list_size(builder->statements), .create = false, .id = variable };
-    linked_list_insert(builder->variables, 0, &var, sizeof(struct cg_var));
+    block_builder_add_statement(builder, (struct cg_statement) {.type = CG_DESTROYVAR, .data.destroyvar.var = variable});
 }
 
 void block_builder_end(struct cg_block_builder *builder, struct cg_block *out) {
+    if (!builder->root) {
+        struct block_builder_end_internal_state state = {.builder = builder, .processed = linked_list_create()};
+        linked_list_foreach(builder->statements, (struct delegate_t) {.func = (void (*)(void *, void *)) &block_builder_end_internal, .state = &state});
+        linked_list_destroy(state.processed);
+    }
+    linked_list_reverse(builder->statements);
     out->statement_count = linked_list_size(builder->statements);
     out->statements = malloc(sizeof(struct cg_statement) * out->statement_count);
     copy_to_array(builder->statements, out->statements, sizeof(struct cg_statement));
     linked_list_destroy(builder->statements);
-    if (builder->root) {
-        out->variable_count = linked_list_size(builder->variables);
-        out->variables = malloc(sizeof(struct cg_var) * out->variable_count);
-        copy_to_array(builder->variables, out->variables, sizeof(struct cg_var));
-        linked_list_destroy(builder->variables);
-    } else {
-        struct linked_list_node_t *node = *builder->variables;
-        linked_list_t *processed = linked_list_create();
-        for (size_t i = linked_list_size(builder->variables); i > builder->start_index; --i) {
-            struct cg_var *var = (struct cg_var *) node->data;
-            if (var->create) {
-                if (!contains_size_t(processed, var->id))
-                    block_builder_destroy_variable(builder, var->id);
-            } else
-                linked_list_insert(processed, 0, &var->id, sizeof(size_t));
-            node = node->ptr;
-        }
-        out->variable_count = 0;
-    }
 }
