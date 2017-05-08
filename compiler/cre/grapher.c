@@ -65,7 +65,7 @@ static struct cg_block *generate_match_function(struct cre_token *tokens, size_t
                         block_builder_destroy_variable(&builder, character);
                         block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = comparison, .expr = {.type = CG_VALUE, .data.value.value = j}}});
                         block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = comparison, .expr = {.type = CG_BINARY, .data.binary = {.type = CG_EQ, .left_var = 3, .right_var = 4}}}});
-                        block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_IFELSE, .data.ifelse = {.cond_var = comparison, .if_true = generate_jump_block(&builder, strdup(label)), .if_false = { .statement_count = 0, .variable_count = 0 }}});
+                        block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_IFELSE, .data.ifelse = {.cond_var = comparison, .if_true = generate_jump_block(&builder, strdup(label)), .if_false = { .statement_count = 0 }}});
                         block_builder_destroy_variable(&builder, comparison);
                     }
                 }
