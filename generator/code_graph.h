@@ -119,7 +119,7 @@ struct cg_statement_assign {
 
 struct cg_statement_call {
     const char *name;
-    struct cg_var *args;
+    size_t *args;
     size_t arg_count;
     size_t out;
 };

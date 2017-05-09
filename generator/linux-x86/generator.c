@@ -6,6 +6,8 @@
 
 #define SIZE_CONVERT(size) ((size) ? (size_t) (1 << ((size) - 1)) : 0)
 
+bool enable_comments = false;
+
 struct var_ref {
     size_t offset;
     enum cg_var_size size : 8;
@@ -18,7 +20,11 @@ struct defragment_state {
     FILE *out;
 };
 
-static char var_size_map[] = {'\0', 'b', 'w', 'l', 'q'};
+static const char var_size_map[] = {'\0', 'b', 'w', 'l', 'q'};
+
+static const char *binary_operators[] = {"+", "-", "*", "/", "%", "&&", "||", "^^", "&", "|", "^", "<", ">", "<=", ">=", "==", "!="};
+
+static const char *var_size_names[] = {"void", "byte", "word", "long", "qword"};
 
 static size_t get_block_stack_size(struct cg_block *block, size_t initial_count, enum cg_var_size *initial_sizes, size_t *var_count_out) {
     if (!block->statement_count)
@@ -117,6 +123,8 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
         switch (stmt->type) {
             case CG_IFELSE: {
                 struct cg_statement_ifelse *data = &stmt->data.ifelse;
+                if (enable_comments)
+                    fprintf(out, "\t; if $%lu\n", data->cond_var);
                 fprintf(out, "\tcmp%c $0, %lu(%%esp)\n", var_size_map[map[data->cond_var].size], map[data->cond_var].offset);
                 size_t _else = (*unique_id)++;
                 size_t _end = (*unique_id)++;
@@ -130,11 +138,15 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
             }
             case CG_JUMP: {
                 struct cg_statement_jump *data = &stmt->data.jump;
+                if (enable_comments)
+                    fprintf(out, "\t; goto %s\n", data->label);
                 fprintf(out, "\tjmp _%s$$%s\n", name, data->label);
                 break;
             }
             case CG_LABEL: {
                 struct cg_statement_label *data = &stmt->data.label;
+                if (enable_comments)
+                    fprintf(out, "\t; %s:\n", data->label);
                 fprintf(out, "_%s$$%s:\n", name, data->label);
                 break;
             }
@@ -142,35 +154,51 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                 struct cg_statement_assign *data = &stmt->data.assign;
                 switch (data->expr.type) {
                     case CG_VAR:
+                        if (enable_comments)
+                            fprintf(out, "\t; $%lu = $%lu\n", data->var, data->expr.data.var);
                         out_copy(data->expr.data.var, data->var, map, out);
                         break;
                     case CG_VALUE:
+                        if (enable_comments)
+                            fprintf(out, "\t; $%lu = %lu\n", data->var, data->expr.data.value);
                         fprintf(out, "\tmov%c $%lu, %lu(%%esp)\n", var_size_map[map[data->var].size], data->expr.data.value.value, map[data->var]);
                         break;
                     case CG_UNARY: {
                         struct cg_expression_unary *edata = &data->expr.data.unary;
                         switch (edata->type) {
                             case CG_POSTINC:
+                                if (enable_comments)
+                                    fprintf(out, "\t; $%lu = $%lu++\n", data->var, edata->var);
                                 out_copy(edata->var, data->var, map, out);
                                 fprintf(out, "\tinc%c %lu(%%esp)\n", var_size_map[map[edata->var].size], map[edata->var].offset);
                                 break;
                             case CG_POSTDEC:
+                                if (enable_comments)
+                                    fprintf(out, "\t; $%lu = $%lu--\n", data->var, edata->var);
                                 out_copy(edata->var, data->var, map, out);
                                 fprintf(out, "\tdec%c %lu(%%esp)\n", var_size_map[map[edata->var].size], map[edata->var].offset);
                                 break;
                             case CG_PREINC:
+                                if (enable_comments)
+                                    fprintf(out, "\t; $%lu = ++$%lu\n", data->var, edata->var);
                                 fprintf(out, "\tinc%c %lu(%%esp)\n", var_size_map[map[edata->var].size], map[edata->var].offset);
                                 out_copy(edata->var, data->var, map, out);
                                 break;
                             case CG_PREDEC:
+                                if (enable_comments)
+                                    fprintf(out, "\t; $%lu = --$%lu\n", data->var, edata->var);
                                 fprintf(out, "\tdec%c %lu(%%esp)\n", var_size_map[map[edata->var].size], map[edata->var].offset);
                                 out_copy(edata->var, data->var, map, out);
                                 break;
                             case CG_NEGATE:
+                                if (enable_comments)
+                                    fprintf(out, "\t; $%lu = -$%lu\n", data->var, edata->var);
                                 out_copy(edata->var, data->var, map, out);
                                 fprintf(out, "\tneg%c %lu(%%esp)\n", var_size_map[map[data->var].size], map[data->var].offset);
                                 break;
                             case CG_LOGIC_NOT: {
+                                if (enable_comments)
+                                    fprintf(out, "\t; $%lu = !$%lu\n", data->var, edata->var);
                                 fprintf(out, "\tcmp%c $0, %lu(%%esp)\n", var_size_map[map[edata->var].size], map[edata->var].offset);
                                 size_t skip = (*unique_id)++;
                                 fprintf(out, "\tje _%s$%lu\n", name, skip);
@@ -184,10 +212,14 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                 break;
                             }
                             case CG_BITWISE_NOT:
+                                if (enable_comments)
+                                    fprintf(out, "\t; $%lu = ~$%lu\n", data->var, edata->var);
                                 out_copy(edata->var, data->var, map, out);
                                 fprintf(out, "\tnot%c %lu(%%esp)\n", var_size_map[map[data->var].size], map[data->var].offset);
                                 break;
                             case CG_DEREF: {
+                                if (enable_comments)
+                                    fprintf(out, "\t; $%lu = *$%lu\n", data->var, edata->var);
                                 size_t off = map[edata->var].offset;
                                 bool zero = false;
                                 const char *reg;
@@ -215,6 +247,8 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                 break;
                             }
                             case CG_ADDR: {
+                                if (enable_comments)
+                                    fprintf(out, "\t; $%lu = &$%lu\n", data->var, edata->var);
                                 size_t off = map[data->var].offset;
                                 const char *reg;
                                 switch (map[edata->var].size) {
@@ -242,6 +276,8 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                     }
                     case CG_BINARY: {
                         struct cg_expression_binary *edata = &data->expr.data.binary;
+                        if (enable_comments)
+                            fprintf(out, "\t; $%lu = $%lu %s $%lu\n", data->var, edata->left_var, binary_operators[edata->type], edata->right_var);
                         struct var_ref dest = map[data->var];
                         struct var_ref left = map[edata->left_var];
                         struct var_ref right = map[edata->right_var];
@@ -507,7 +543,7 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                     fprintf(out, "\tjne _%s$%lu\n", name, skip);
                                 }
                                 fprintf(out, "\tcmpl %%eax, %%ebx\n");
-                                fprintf(out, "\tjne_%s$%lu\n", name, skip);
+                                fprintf(out, "\tjne _%s$%lu\n", name, skip);
                                 fprintf(out, "\tmovl $1, %%eax\n");
                                 fprintf(out, "\tjmp _%s$%lu\n", name, end);
                                 fprintf(out, "_%s$%lu:\n", name, skip);
@@ -533,7 +569,7 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                     fprintf(out, "\tjne _%s$%lu\n", name, skip);
                                 }
                                 fprintf(out, "\tcmpl %%eax, %%ebx\n");
-                                fprintf(out, "\tjne_%s$%lu\n", name, skip);
+                                fprintf(out, "\tjne _%s$%lu\n", name, skip);
                                 fprintf(out, "\txorl %%eax, %%eax\n");
                                 fprintf(out, "\tjmp _%s$%lu\n", name, end);
                                 fprintf(out, "_%s$%lu:\n", name, skip);
@@ -547,34 +583,55 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                         break;
                     }
                 }
-            }
-            case CG_CALL:
                 break;
-            case CG_ENDFUNC:
-                switch (map[stmt->data.endfunc.var].size) {
+            }
+            case CG_CALL: {
+                struct cg_statement_call *data = &stmt->data.call;
+                if (enable_comments) {
+                    fprintf(out, "\t; $%lu = %s(", data->out, data->name);
+                    for (size_t j = 0; j < data->arg_count; ++j)
+                        fprintf(out, j ? ", $%lu" : "$%lu", data->args[j]);
+                    fprintf(out, ")\n");
+                }
+                fprintf(stderr, "Warning: statement #%lu is a call, which is not implemented yet!\n", i);
+                break;
+            }
+            case CG_ENDFUNC: {
+                struct cg_statement_endfunc *data = &stmt->data.endfunc;
+                if (enable_comments) {
+                    if (function->return_type)
+                        fprintf(out, "\t; return $%lu\n", data->var);
+                    else
+                        fprintf(out, "\t; return\n");
+                }
+                switch (map[data->var].size) {
                     case CG_VOID:
                         break;
                     case CG_BYTE:
                         fprintf(out, "\txorl %%eax\n");
-                        fprintf(out, "\tmovb %lu(%%esp), %%al\n", map[stmt->data.endfunc.var].offset);
+                        fprintf(out, "\tmovb %lu(%%esp), %%al\n", map[data->var].offset);
                         break;
                     case CG_WORD:
                         fprintf(out, "\txorl %%eax\n");
-                        fprintf(out, "\tmovw %lu(%%esp), %%ax\n", map[stmt->data.endfunc.var].offset);
+                        fprintf(out, "\tmovw %lu(%%esp), %%ax\n", map[data->var].offset);
                         break;
                     case CG_LONG:
-                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", map[stmt->data.endfunc.var].offset);
+                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", map[data->var].offset);
                         break;
                     case CG_QWORD:
                         if (function->return_type == CG_QWORD)
-                            fprintf(out, "\tmovl %lu(%%esp), %%edx\n", map[stmt->data.endfunc.var].offset);
-                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", map[stmt->data.endfunc.var].offset + 4);
+                            fprintf(out, "\tmovl %lu(%%esp), %%edx\n", map[data->var].offset);
+                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", map[data->var].offset + 4);
                         break;
                 }
                 fprintf(out, "\tjmp _%s$end\n", name);
                 break;
+            }
             case CG_CREATEVAR: {
-                size_t size = SIZE_CONVERT(stmt->data.createvar.size);
+                struct cg_statement_createvar *data = &stmt->data.createvar;
+                if (enable_comments)
+                    fprintf(out, "\t; %s $%lu\n", var_size_names[data->size], data->var);
+                size_t size = SIZE_CONVERT(data->size);
                 size_t off = 0;
                 struct linked_list_node_t *node = *reverse;
                 size_t index = 0;
@@ -591,16 +648,19 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                     linked_list_foreach(reverse, (struct delegate_t) {.func = (void (*)(void *, void *)) &defragment, .state = &state});
                     off = state.offset;
                 }
-                linked_list_insert(reverse, index, &stmt->data.createvar.var, sizeof(size_t));
-                map[stmt->data.createvar.var] = (struct var_ref) {.offset = off, .size = stmt->data.createvar.size, .exists = true};
+                linked_list_insert(reverse, index, &data->var, sizeof(size_t));
+                map[data->var] = (struct var_ref) {.offset = off, .size = data->size, .exists = true};
                 break;
             }
             case CG_DESTROYVAR: {
-                map[stmt->data.destroyvar.var].exists = false;
+                struct cg_statement_destroyvar *data = &stmt->data.destroyvar;
+                if (enable_comments)
+                    fprintf(out, "\t; delete $%lu\n", data->var);
+                map[data->var].exists = false;
                 struct linked_list_node_t *node = *reverse;
                 size_t index = 0;
                 while (node) {
-                    if (*(size_t *) node->data == stmt->data.destroyvar.var)
+                    if (*(size_t *) node->data == data->var)
                         break;
                     node = node->ptr;
                     ++index;

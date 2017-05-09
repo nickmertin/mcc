@@ -7,7 +7,7 @@
 #include "../util/io.h"
 #include "launchers.h"
 
-const char *cli_options[] = { "pipe", NULL };
+const char *cli_options[] = { "pipe", "comment", NULL };
 const char *cli_short_options = "o:";
 
 int mcc_launch(linked_list_t opts, linked_list_t args) {
@@ -30,6 +30,7 @@ int mcc_launch(linked_list_t opts, linked_list_t args) {
             return errno;
         }
     }
+    enable_comments = get_launcher_opt_exists(opts, "comment");
     generate_code(graph(parse(read_all(in))), out);
     if (in != stdin)
         fclose(in);
