@@ -89,6 +89,7 @@ struct cg_expression {
 
 enum cg_statement_type {
     CG_IFELSE,
+    CG_JUMPIF,
     CG_JUMP,
     CG_LABEL,
     CG_ASSIGN,
@@ -102,6 +103,11 @@ struct cg_statement_ifelse {
     size_t cond_var;
     struct cg_block if_true;
     struct cg_block if_false;
+};
+
+struct cg_statement_jumpif {
+    size_t cond_var;
+    const char *label;
 };
 
 struct cg_statement_jump {
@@ -139,6 +145,7 @@ struct cg_statement_destroyvar {
 
 union cg_statement_data {
     struct cg_statement_ifelse ifelse;
+    struct cg_statement_jumpif jumpif;
     struct cg_statement_jump jump;
     struct cg_statement_label label;
     struct cg_statement_assign assign;

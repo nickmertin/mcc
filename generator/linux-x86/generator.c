@@ -104,16 +104,40 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
             case CG_IFELSE: {
                 struct cg_statement_ifelse *data = &stmt->data.ifelse;
                 if (enable_comments)
-                    fprintf(out, "\t# if $%lu\n", data->cond_var);
-                fprintf(out, "\tcmp%c $0, %lu(%%esp)\n", var_size_map[map[data->cond_var].size], map[data->cond_var].offset);
+                    fprintf(out, "\t# if $%lu then\n", data->cond_var);
+                struct var_ref var = map[data->cond_var];
+                if (var.size == CG_QWORD) {
+                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
+                    fprintf(out, "\torl %lu(%%esp), %%eax\n", var.offset);
+                    fprintf(out, "\tcmpl $0, %%eax\n");
+                } else
+                    fprintf(out, "\tcmp%c $0, %lu(%%esp)\n", var_size_map[var.size], var.offset);
                 size_t _else = (*unique_id)++;
                 size_t _end = (*unique_id)++;
                 fprintf(out, "\tje _%s$%lu\n", name, _else);
                 generate_block(function, &data->if_true, map, reverse, max_stack_size, unique_id, name, out);
                 fprintf(out, "\tjmp _%s$%lu\n", name, _end);
+                if (enable_comments)
+                    fprintf(out, "\t# else\n");
                 fprintf(out, "_%s$%lu:\n", name, _else);
                 generate_block(function, &data->if_false, map, reverse, max_stack_size, unique_id, name, out);
                 fprintf(out, "_%s$%lu:\n", name, _end);
+                if (enable_comments)
+                    fprintf(out, "\t# end if\n");
+                break;
+            }
+            case CG_JUMPIF: {
+                struct cg_statement_jumpif *data = &stmt->data.jumpif;
+                if (enable_comments)
+                    fprintf(out, "\t# if $%lu goto %s\n", data->cond_var, data->label);
+                struct var_ref var = map[data->cond_var];
+                if (var.size == CG_QWORD) {
+                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
+                    fprintf(out, "\torl %lu(%%esp), %%eax\n", var.offset);
+                    fprintf(out, "\tcmpl $0, %%eax\n");
+                } else
+                    fprintf(out, "\tcmp%c $0, %lu(%%esp)\n", var_size_map[var.size], var.offset);
+                fprintf(out, "\tjne _%s$$%s\n", name, data->label);
                 break;
             }
             case CG_JUMP: {
