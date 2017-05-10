@@ -12,5 +12,5 @@ int main() {
     block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ENDFUNC, .data.endfunc.var = out_var});
     block_builder_end(&builder, &func.body);
     struct cg_file_graph graph = {.function_count = 1, .functions = &func};
-    generate_code(&graph, stdout);
+    generate_code(&graph, NULL, stdout);
 }
