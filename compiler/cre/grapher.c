@@ -1,13 +1,8 @@
 #include "grapher.h"
 #include <malloc.h>
-#include "../../util/linked_list.h"
 #include "../../util/misc.h"
 
 static size_t unique_id = 0;
-
-static size_t flag_count(void *data, size_t length) {
-
-}
 
 static struct cg_block generate_jump_block(struct cg_block_builder *parent, char *label) {
     struct cg_block_builder builder;
@@ -42,6 +37,7 @@ static struct cg_block generate_return_value_block(struct cg_block_builder *pare
     size_t result_var = block_builder_create_variable(&builder, size);
     block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = result_var, .expr = {.type = CG_VAR, .data.value.value =  result}}});
     block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ENDFUNC, .data.endfunc.var = result_var});
+    block_builder_destroy_variable(&builder, result_var);
     struct cg_block block;
     block_builder_end(&builder, &block);
     return block;
@@ -58,23 +54,28 @@ static struct cg_block *generate_match_function(struct cre_token *tokens, size_t
         switch (tokens[i].type) {
             case CRE_CHAR:
                 sprintf(label, "_%lx", unique_id++);
+                size_t character = block_builder_create_variable(&builder, CG_BYTE), comparison = block_builder_create_variable(&builder, CG_BYTE);
+                block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = character, .expr = {.type = CG_UNARY, .data.unary = {.var = 0, .type = CG_DEREF}}}});
+                block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_JUMPIF, .data.jumpif = {.cond_var = character, .label = strdup(label)}});
+                block_builder_merge_block(&builder, generate_return_value_block(&builder, 0, CG_BYTE));
+                block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_LABEL, .data.label.label = strdup(label)});
+                sprintf(label, "_%lx", unique_id++);
                 for (size_t j = 0; j < 256; ++j) {
                     if (getFlag(tokens[i].filter, j)) {
-                        size_t character = block_builder_create_variable(&builder, CG_BYTE), comparison = block_builder_create_variable(&builder, CG_BYTE);
-                        block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = character, .expr = {.type = CG_UNARY, .data.unary = {.var = 0, .type = CG_DEREF}}}});
                         block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = comparison, .expr = {.type = CG_VALUE, .data.value.value = j}}});
                         block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = comparison, .expr = {.type = CG_BINARY, .data.binary = {.type = CG_EQ, .left_var = comparison, .right_var = character}}}});
-                        block_builder_destroy_variable(&builder, character);
-                        block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_IFELSE, .data.ifelse = {.cond_var = comparison, .if_true = generate_jump_block(&builder, strdup(label)), .if_false.statement_count = 0 }});
-                        block_builder_destroy_variable(&builder, comparison);
+                        block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_JUMPIF, .data.jumpif = {.cond_var = comparison, .label = strdup(label)}});
                     }
                 }
+                block_builder_destroy_variable(&builder, character);
+                block_builder_destroy_variable(&builder, comparison);
                 block_builder_merge_block(&builder, generate_return_value_block(&builder, 0, CG_BYTE));
                 block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_LABEL, .data.label.label = strdup(label)});
                 break;
         }
         block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = 0, .expr = {.type = CG_BINARY, .data.binary = {.type = CG_ADD, .left_var = 0, .right_var = var1}}}});
     }
+    block_builder_merge_block(&builder, generate_return_value_block(&builder, 1, CG_BYTE));
     result = malloc(sizeof(struct cg_block));
     block_builder_end(&builder, result);
     return result;
