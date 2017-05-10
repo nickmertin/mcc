@@ -173,7 +173,7 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                     }
                     case CG_VALUE:
                         if (enable_comments)
-                            fprintf(out, "\t# $%lu = %lu\n", data->var, data->expr.data.value);
+                            fprintf(out, "\t# $%lu = %lu\n", data->var, data->expr.data.value.value);
                         fprintf(out, "\tmov%c $%lu, %lu(%%esp)\n", var_size_map[map[data->var].size], data->expr.data.value.value, map[data->var]);
                         break;
                     case CG_UNARY: {
