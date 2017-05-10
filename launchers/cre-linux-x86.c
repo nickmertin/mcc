@@ -31,7 +31,7 @@ int mcc_launch(linked_list_t opts, linked_list_t args) {
         }
     }
     enable_comments = get_launcher_opt_exists(opts, "comment");
-    generate_code(graph(parse(read_all(in))), out);
+    generate_code(graph(parse(read_all(in))), get_file_name(in), out);
     if (in != stdin)
         fclose(in);
     if (out != stdout)

@@ -91,6 +91,8 @@ static void write_move(size_t dest, size_t src, enum cg_var_size size, FILE *out
 static void defragment(size_t *data, struct defragment_state *state) {
     struct var_ref *var = &state->map[*data];
     if (var->offset != state->offset) {
+        if (enable_comments)
+            fprintf(state->out, "\t$%lu @ %lu -> %lu\n", *data, var->offset, state->offset);
         write_move(state->offset, var->offset, var->size, state->out);
         var->offset = state->offset;
     }
@@ -178,7 +180,7 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                         break;
                     case CG_UNARY: {
                         struct cg_expression_unary *edata = &data->expr.data.unary;
-                        bool copy = true;
+                        bool copy = data->var != edata->var;
                         bool qword = false;
                         struct var_ref var = map[edata->var];
                         struct var_ref dest = map[data->var];
@@ -187,15 +189,19 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                 if (enable_comments)
                                     fprintf(out, "\t# $%lu = $%lu++\n", data->var, edata->var);
                                 if (var.size == CG_QWORD) {
-                                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
-                                    fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                                    if (copy) {
+                                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
+                                        fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                                    }
                                     fprintf(out, "\taddl $1, %lu(%%esp)\n", var.offset + 4);
                                     fprintf(out, "\tadcl $0, %lu(%%esp)\n", var.offset);
                                     qword = true;
                                 } else {
-                                    if (var.size != CG_LONG)
-                                        fprintf(out, "\txorl %%eax, %%eax\n");
-                                    fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[var.size], var.offset, primary_registers[var.size]);
+                                    if (copy) {
+                                        if (var.size != CG_LONG)
+                                            fprintf(out, "\txorl %%eax, %%eax\n");
+                                        fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[var.size], var.offset, primary_registers[var.size]);
+                                    }
                                     fprintf(out, "\tinc%c %lu(%%esp)\n", var_size_map[map[edata->var].size], map[edata->var].offset);
                                 }
                                 break;
@@ -203,15 +209,19 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                 if (enable_comments)
                                     fprintf(out, "\t# $%lu = $%lu--\n", data->var, edata->var);
                                 if (var.size == CG_QWORD) {
-                                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
-                                    fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                                    if (copy) {
+                                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
+                                        fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                                    }
                                     fprintf(out, "\tsubl $1, %lu(%%esp)\n", var.offset + 4);
                                     fprintf(out, "\tsbbl $0, %lu(%%esp)\n", var.offset);
                                     qword = true;
                                 } else {
-                                    if (var.size != CG_LONG)
-                                        fprintf(out, "\txorl %%eax, %%eax\n");
-                                    fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[var.size], var.offset, primary_registers[var.size]);
+                                    if (copy) {
+                                        if (var.size != CG_LONG)
+                                            fprintf(out, "\txorl %%eax, %%eax\n");
+                                        fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[var.size], var.offset, primary_registers[var.size]);
+                                    }
                                     fprintf(out, "\tdec%c %lu(%%esp)\n", var_size_map[map[edata->var].size], map[edata->var].offset);
                                 }
                                 break;
@@ -221,14 +231,18 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                 if (var.size == CG_QWORD) {
                                     fprintf(out, "\taddl $1, %lu(%%esp)\n", var.offset + 4);
                                     fprintf(out, "\tadcl $0, %lu(%%esp)\n", var.offset);
-                                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
-                                    fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                                    if (copy) {
+                                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
+                                        fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                                    }
                                     qword = true;
                                 } else {
                                     fprintf(out, "\tinc%c %lu(%%esp)\n", var_size_map[map[edata->var].size], map[edata->var].offset);
-                                    if (var.size != CG_LONG)
-                                        fprintf(out, "\txorl %%eax, %%eax\n");
-                                    fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[var.size], var.offset, primary_registers[var.size]);
+                                    if (copy) {
+                                        if (var.size != CG_LONG)
+                                            fprintf(out, "\txorl %%eax, %%eax\n");
+                                        fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[var.size], var.offset, primary_registers[var.size]);
+                                    }
                                 }
                                 break;
                             case CG_PREDEC:
@@ -241,9 +255,11 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                     fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
                                 } else {
                                     fprintf(out, "\tdec%c %lu(%%esp)\n", var_size_map[map[edata->var].size], map[edata->var].offset);
-                                    if (var.size != CG_LONG)
-                                        fprintf(out, "\txorl %%eax, %%eax\n");
-                                    fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[var.size], var.offset, primary_registers[var.size]);
+                                    if (copy) {
+                                        if (var.size != CG_LONG)
+                                            fprintf(out, "\txorl %%eax, %%eax\n");
+                                        fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[var.size], var.offset, primary_registers[var.size]);
+                                    }
                                 }
                                 break;
                             case CG_NEGATE:
@@ -252,13 +268,16 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                 if (var.size == CG_QWORD) {
                                     fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
                                     fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                                    copy = true;
                                     qword = true;
-                                } else {
+                                } else if (copy) {
                                     if (var.size != CG_LONG)
                                         fprintf(out, "\txorl %%eax, %%eax\n");
                                     fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[var.size], var.offset, primary_registers[var.size]);
-                                }
-                                fprintf(out, "\tneg%c %%%s\n", var_size_map[var.size], primary_registers[var.size]);
+                                } else
+                                    fprintf(out, "\tneg%c %lu(%%esp)\n", var_size_map[var.size], var.offset);
+                                if (copy)
+                                    fprintf(out, "\tneg%c %%%s\n", var_size_map[var.size], primary_registers[var.size]);
                                 break;
                             case CG_LOGIC_NOT: {
                                 if (enable_comments)
@@ -293,12 +312,14 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                     fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
                                     fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
                                     qword = true;
-                                } else {
+                                } else if (copy) {
                                     if (var.size != CG_LONG)
                                         fprintf(out, "\txorl %%eax, %%eax\n");
                                     fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[var.size], var.offset, primary_registers[var.size]);
-                                }
-                                fprintf(out, "\tnot%c %%%s\n", var_size_map[var.size], primary_registers[var.size]);
+                                } else
+                                    fprintf(out, "\tnot%c %lu(%%esp)\n", var_size_map[var.size], var.offset);
+                                if (copy)
+                                    fprintf(out, "\tnot%c %%%s\n", var_size_map[var.size], primary_registers[var.size]);
                                 break;
                             case CG_DEREF: {
                                 if (enable_comments)
@@ -320,12 +341,14 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                     fprintf(out, "\tmovl 4(%%eax), %%eax\n");
                                     qword = true;
                                 }
+                                copy = true;
                                 break;
                             }
                             case CG_ADDR: {
                                 if (enable_comments)
                                     fprintf(out, "\t# $%lu = &$%lu\n", data->var, edata->var);
                                 fprintf(out, "\tleal %lu(%%esp), %%eax\n", dest.offset);
+                                copy = true;
                                 break;
                             }
                         }
@@ -693,8 +716,6 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
             }
             case CG_CREATEVAR: {
                 struct cg_statement_createvar *data = &stmt->data.createvar;
-                if (enable_comments)
-                    fprintf(out, "\t# %s $%lu\n", var_size_names[data->size], data->var);
                 size_t size = SIZE_CONVERT(data->size);
                 size_t off = 0;
                 struct linked_list_node_t *node = *reverse;
@@ -712,6 +733,8 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                     linked_list_foreach(reverse, (struct delegate_t) {.func = (void (*)(void *, void *)) &defragment, .state = &state});
                     off = state.offset;
                 }
+                if (enable_comments)
+                    fprintf(out, "\t# %s $%lu @ %lu\n", var_size_names[data->size], data->var, off);
                 linked_list_insert(reverse, index, &data->var, sizeof(size_t));
                 map[data->var] = (struct var_ref) {.offset = off, .size = data->size, .exists = true};
                 break;
@@ -736,8 +759,10 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
     }
 }
 
-void generate_code(struct cg_file_graph *graph, FILE *out) {
+void generate_code(struct cg_file_graph *graph, const char *filename, FILE *out) {
     size_t unique_id = 0;
+    if (filename)
+        fprintf(out, "\t.file \"%s\"\n", filename);
     fprintf(out, "\t.text\n");
     for (size_t i = 0; i < graph->function_count; ++i) {
         struct cg_function *f = &graph->functions[i];
@@ -749,6 +774,7 @@ void generate_code(struct cg_file_graph *graph, FILE *out) {
         struct var_ref *map = malloc(sizeof(struct var_ref) * var_count);
         linked_list_t *reverse = linked_list_create();
         size_t off = 0;
+        fprintf(out, "\tpushl %%ebx\n");
         fprintf(out, "\tpushl %%ebp\n");
         fprintf(out, "\tmovl %%esp, %%ebp\n");
         fprintf(out, "\tsubl $%lu, %%esp\n", stack_size);
@@ -763,6 +789,7 @@ void generate_code(struct cg_file_graph *graph, FILE *out) {
         free(map);
         fprintf(out, "_%s$end:\n", f->name);
         fprintf(out, "\tleave\n");
+        fprintf(out, "\tpopl %%ebx\n");
         fprintf(out, "\tret\n");
     }
 }

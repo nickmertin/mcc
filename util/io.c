@@ -1,7 +1,11 @@
 #include "io.h"
+#include <stdio.h>
+#include <unistd.h>
 #include <malloc.h>
 #include <string.h>
+#include <strings.h>
 #include "linked_list.h"
+#include "misc.h"
 
 struct handle_read_state {
     char *contents;
@@ -35,4 +39,18 @@ char *read_all(FILE *file) {
     contents[size] = 0;
     linked_list_destroy(blocks);
     return contents;
+}
+
+char *get_file_name(FILE *file) {
+    char link[128];
+    sprintf(link, "/proc/self/fd/%d", fileno(file));
+    char path[1024];
+    bzero(path, 1024);
+    readlink(link, path, 1023);
+    char *ptr = &path[strlen(path)];
+    while (ptr != path && *ptr != '/')
+        --ptr;
+    if (*ptr == '/')
+        ++ptr;
+    return strdup(ptr);
 }
