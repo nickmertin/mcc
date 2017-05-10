@@ -35,7 +35,7 @@ static struct cg_block generate_return_value_block(struct cg_block_builder *pare
     struct cg_block_builder builder;
     block_builder_create_child(&builder, parent);
     size_t result_var = block_builder_create_variable(&builder, size);
-    block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = result_var, .expr = {.type = CG_VAR, .data.value.value =  result}}});
+    block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = result_var, .expr = {.type = CG_VALUE, .data.value.value =  result}}});
     block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ENDFUNC, .data.endfunc.var = result_var});
     block_builder_destroy_variable(&builder, result_var);
     struct cg_block block;
@@ -47,8 +47,6 @@ static struct cg_block *generate_match_function(struct cre_token *tokens, size_t
     struct cg_block *result = NULL;
     struct cg_block_builder builder;
     block_builder_create_root(&builder, 1);
-    size_t var1 = block_builder_create_variable(&builder, CG_LONG);
-    block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = var1, .expr = {.type = CG_VALUE, .data.value.value = 1}}});
     char label[18];
     for (size_t i = 0; i < token_count; ++i) {
         switch (tokens[i].type) {
@@ -73,7 +71,7 @@ static struct cg_block *generate_match_function(struct cre_token *tokens, size_t
                 block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_LABEL, .data.label.label = strdup(label)});
                 break;
         }
-        block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = 0, .expr = {.type = CG_BINARY, .data.binary = {.type = CG_ADD, .left_var = 0, .right_var = var1}}}});
+        block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = 0, .expr = {.type = CG_UNARY, .data.unary = {.type = CG_PREINC, .var = 0 }}}});
     }
     block_builder_merge_block(&builder, generate_return_value_block(&builder, 1, CG_BYTE));
     result = malloc(sizeof(struct cg_block));
@@ -104,6 +102,7 @@ struct cg_file_graph *graph(struct cre_parsed_file *file) {
                 if (!match)
                     match = generate_match_function(expr->tokens, expr->token_count);
                 map_to_match_function(&function, match, attr->data, 0);
+                function.access_level = 1;
                 linked_list_insert(functions, 0, &function, sizeof(struct cg_function));
             }
         }
