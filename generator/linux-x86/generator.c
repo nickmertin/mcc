@@ -6,6 +6,8 @@
 
 #define SIZE_CONVERT(size) ((size) ? (size_t) (1 << ((size) - 1)) : 0)
 
+bool enable_comments = false;
+
 struct var_ref {
     size_t offset;
     enum cg_var_size size : 8;
@@ -18,7 +20,15 @@ struct defragment_state {
     FILE *out;
 };
 
-static char var_size_map[] = {'\0', 'b', 'w', 'l', 'q'};
+static const char var_size_map[] = {'\0', 'b', 'w', 'l', 'l'};
+
+static const char *primary_registers[] = {"", "al", "ax", "eax", "edx"};
+
+static const char *secondary_registers[] = {"", "bl", "bx", "ebx", "ecx"};
+
+static const char *binary_operators[] = {"+", "-", "*", "/", "%", "&&", "||", "^^", "&", "|", "^", "<", ">", "<=", ">=", "==", "!="};
+
+static const char *var_size_names[] = {"void", "byte", "word", "long", "qword"};
 
 static size_t get_block_stack_size(struct cg_block *block, size_t initial_count, enum cg_var_size *initial_sizes, size_t *var_count_out) {
     if (!block->statement_count)
@@ -66,18 +76,6 @@ static void out_zero(enum cg_var_size size, size_t off, FILE *out) {
     fprintf(out, "\txor%c %lu(%%esp), %lu(%%esp)\n", var_size_map[size], off, off);
 }
 
-static void out_copy(size_t src, size_t dest, struct var_ref *map, FILE *out) {
-    size_t in_off = map[src].offset;
-    size_t out_off = map[dest].offset;
-    if (map[src].size > map[dest].size)
-        in_off += SIZE_CONVERT(map[src].size) - SIZE_CONVERT(map[dest].size);
-    if (map[src].size < map[dest].size) {
-        out_zero(map[dest].size, out_off, out);
-        out_off += SIZE_CONVERT(map[dest].size) - SIZE_CONVERT(map[src].size);
-    }
-    fprintf(out, "\tmov%c %lu(%%esp) %lu(%%esp)\n", var_size_map[min(map[dest].size, map[src].size)], in_off, out_off);
-}
-
 static void write_move(size_t dest, size_t src, enum cg_var_size size, FILE *out) {
     if (size == CG_QWORD) {
         fprintf(out, "\tmovl %lu(%%esp), %%edx\n", src);
@@ -85,26 +83,16 @@ static void write_move(size_t dest, size_t src, enum cg_var_size size, FILE *out
         fprintf(out, "\tmovl %%edx, %lu(%%esp)\n", dest);
         fprintf(out, "\tmovl %%eax, %lu(%%esp)\n", dest + 4);
     } else {
-        char *reg;
-        switch (size) {
-            case CG_BYTE:
-                reg = "al";
-                break;
-            case CG_WORD:
-                reg = "ax";
-                break;
-            case CG_LONG:
-                reg = "eax";
-                break;
-        }
-        fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[size], src, reg);
-        fprintf(out, "\tmov%c %%%s, %lu(%%esp)\n", var_size_map[size], reg, dest);
+        fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[size], src, primary_registers[size]);
+        fprintf(out, "\tmov%c %%%s, %lu(%%esp)\n", var_size_map[size], primary_registers[size], dest);
     }
 }
 
 static void defragment(size_t *data, struct defragment_state *state) {
     struct var_ref *var = &state->map[*data];
     if (var->offset != state->offset) {
+        if (enable_comments)
+            fprintf(state->out, "\t$%lu @ %lu -> %lu\n", *data, var->offset, state->offset);
         write_move(state->offset, var->offset, var->size, state->out);
         var->offset = state->offset;
     }
@@ -117,144 +105,285 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
         switch (stmt->type) {
             case CG_IFELSE: {
                 struct cg_statement_ifelse *data = &stmt->data.ifelse;
-                fprintf(out, "\tcmp%c $0, %lu(%%esp)\n", var_size_map[map[data->cond_var].size], map[data->cond_var].offset);
+                if (enable_comments)
+                    fprintf(out, "\t# if $%lu then\n", data->cond_var);
+                struct var_ref var = map[data->cond_var];
+                if (var.size == CG_QWORD) {
+                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
+                    fprintf(out, "\torl %lu(%%esp), %%eax\n", var.offset);
+                    fprintf(out, "\tcmpl $0, %%eax\n");
+                } else
+                    fprintf(out, "\tcmp%c $0, %lu(%%esp)\n", var_size_map[var.size], var.offset);
                 size_t _else = (*unique_id)++;
                 size_t _end = (*unique_id)++;
                 fprintf(out, "\tje _%s$%lu\n", name, _else);
                 generate_block(function, &data->if_true, map, reverse, max_stack_size, unique_id, name, out);
                 fprintf(out, "\tjmp _%s$%lu\n", name, _end);
+                if (enable_comments)
+                    fprintf(out, "\t# else\n");
                 fprintf(out, "_%s$%lu:\n", name, _else);
                 generate_block(function, &data->if_false, map, reverse, max_stack_size, unique_id, name, out);
                 fprintf(out, "_%s$%lu:\n", name, _end);
+                if (enable_comments)
+                    fprintf(out, "\t# end if\n");
+                break;
+            }
+            case CG_JUMPIF: {
+                struct cg_statement_jumpif *data = &stmt->data.jumpif;
+                if (enable_comments)
+                    fprintf(out, "\t# if $%lu goto %s\n", data->cond_var, data->label);
+                struct var_ref var = map[data->cond_var];
+                if (var.size == CG_QWORD) {
+                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
+                    fprintf(out, "\torl %lu(%%esp), %%eax\n", var.offset);
+                    fprintf(out, "\tcmpl $0, %%eax\n");
+                } else
+                    fprintf(out, "\tcmp%c $0, %lu(%%esp)\n", var_size_map[var.size], var.offset);
+                fprintf(out, "\tjne _%s$$%s\n", name, data->label);
                 break;
             }
             case CG_JUMP: {
                 struct cg_statement_jump *data = &stmt->data.jump;
+                if (enable_comments)
+                    fprintf(out, "\t# goto %s\n", data->label);
                 fprintf(out, "\tjmp _%s$$%s\n", name, data->label);
                 break;
             }
             case CG_LABEL: {
                 struct cg_statement_label *data = &stmt->data.label;
+                if (enable_comments)
+                    fprintf(out, "\t# %s:\n", data->label);
                 fprintf(out, "_%s$$%s:\n", name, data->label);
                 break;
             }
             case CG_ASSIGN: {
                 struct cg_statement_assign *data = &stmt->data.assign;
                 switch (data->expr.type) {
-                    case CG_VAR:
-                        out_copy(data->expr.data.var, data->var, map, out);
+                    case CG_VAR: {
+                        if (enable_comments)
+                            fprintf(out, "\t# $%lu = $%lu\n", data->var, data->expr.data.var);
+                        struct var_ref src = map[data->expr.data.var];
+                        struct var_ref dest = map[data->var];
+                        size_t src_off = src.offset;
+                        size_t dest_off = dest.offset;
+                        if (src.size > dest.size)
+                            src_off += SIZE_CONVERT(src.size) - SIZE_CONVERT(dest.size);
+                        else if (src.size < dest.size)
+                            dest_off += SIZE_CONVERT(dest.size) - SIZE_CONVERT(src.size);
+                        write_move(dest_off, src_off, min(src.size, dest.size), out);
                         break;
+                    }
                     case CG_VALUE:
+                        if (enable_comments)
+                            fprintf(out, "\t# $%lu = %lu\n", data->var, data->expr.data.value.value);
                         fprintf(out, "\tmov%c $%lu, %lu(%%esp)\n", var_size_map[map[data->var].size], data->expr.data.value.value, map[data->var]);
                         break;
                     case CG_UNARY: {
                         struct cg_expression_unary *edata = &data->expr.data.unary;
+                        bool copy = data->var != edata->var;
+                        bool qword = false;
+                        struct var_ref var = map[edata->var];
+                        struct var_ref dest = map[data->var];
                         switch (edata->type) {
                             case CG_POSTINC:
-                                out_copy(edata->var, data->var, map, out);
-                                fprintf(out, "\tinc%c %lu(%%esp)\n", var_size_map[map[edata->var].size], map[edata->var].offset);
+                                if (enable_comments)
+                                    fprintf(out, "\t# $%lu = $%lu++\n", data->var, edata->var);
+                                if (var.size == CG_QWORD) {
+                                    if (copy) {
+                                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
+                                        fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                                    }
+                                    fprintf(out, "\taddl $1, %lu(%%esp)\n", var.offset + 4);
+                                    fprintf(out, "\tadcl $0, %lu(%%esp)\n", var.offset);
+                                    qword = true;
+                                } else {
+                                    if (copy) {
+                                        if (var.size != CG_LONG)
+                                            fprintf(out, "\txorl %%eax, %%eax\n");
+                                        fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[var.size], var.offset, primary_registers[var.size]);
+                                    }
+                                    fprintf(out, "\tinc%c %lu(%%esp)\n", var_size_map[map[edata->var].size], map[edata->var].offset);
+                                }
                                 break;
                             case CG_POSTDEC:
-                                out_copy(edata->var, data->var, map, out);
-                                fprintf(out, "\tdec%c %lu(%%esp)\n", var_size_map[map[edata->var].size], map[edata->var].offset);
+                                if (enable_comments)
+                                    fprintf(out, "\t# $%lu = $%lu--\n", data->var, edata->var);
+                                if (var.size == CG_QWORD) {
+                                    if (copy) {
+                                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
+                                        fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                                    }
+                                    fprintf(out, "\tsubl $1, %lu(%%esp)\n", var.offset + 4);
+                                    fprintf(out, "\tsbbl $0, %lu(%%esp)\n", var.offset);
+                                    qword = true;
+                                } else {
+                                    if (copy) {
+                                        if (var.size != CG_LONG)
+                                            fprintf(out, "\txorl %%eax, %%eax\n");
+                                        fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[var.size], var.offset, primary_registers[var.size]);
+                                    }
+                                    fprintf(out, "\tdec%c %lu(%%esp)\n", var_size_map[map[edata->var].size], map[edata->var].offset);
+                                }
                                 break;
                             case CG_PREINC:
-                                fprintf(out, "\tinc%c %lu(%%esp)\n", var_size_map[map[edata->var].size], map[edata->var].offset);
-                                out_copy(edata->var, data->var, map, out);
+                                if (enable_comments)
+                                    fprintf(out, "\t# $%lu = ++$%lu\n", data->var, edata->var);
+                                if (var.size == CG_QWORD) {
+                                    fprintf(out, "\taddl $1, %lu(%%esp)\n", var.offset + 4);
+                                    fprintf(out, "\tadcl $0, %lu(%%esp)\n", var.offset);
+                                    if (copy) {
+                                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
+                                        fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                                    }
+                                    qword = true;
+                                } else {
+                                    fprintf(out, "\tinc%c %lu(%%esp)\n", var_size_map[map[edata->var].size], map[edata->var].offset);
+                                    if (copy) {
+                                        if (var.size != CG_LONG)
+                                            fprintf(out, "\txorl %%eax, %%eax\n");
+                                        fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[var.size], var.offset, primary_registers[var.size]);
+                                    }
+                                }
                                 break;
                             case CG_PREDEC:
-                                fprintf(out, "\tdec%c %lu(%%esp)\n", var_size_map[map[edata->var].size], map[edata->var].offset);
-                                out_copy(edata->var, data->var, map, out);
+                                if (enable_comments)
+                                    fprintf(out, "\t# $%lu = --$%lu\n", data->var, edata->var);
+                                if (var.size == CG_QWORD) {
+                                    fprintf(out, "\tsubl $1, %lu(%%esp)\n", var.offset + 4);
+                                    fprintf(out, "\tsbbl $0, %lu(%%esp)\n", var.offset);
+                                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
+                                    fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                                } else {
+                                    fprintf(out, "\tdec%c %lu(%%esp)\n", var_size_map[map[edata->var].size], map[edata->var].offset);
+                                    if (copy) {
+                                        if (var.size != CG_LONG)
+                                            fprintf(out, "\txorl %%eax, %%eax\n");
+                                        fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[var.size], var.offset, primary_registers[var.size]);
+                                    }
+                                }
                                 break;
                             case CG_NEGATE:
-                                out_copy(edata->var, data->var, map, out);
-                                fprintf(out, "\tneg%c %lu(%%esp)\n", var_size_map[map[data->var].size], map[data->var].offset);
+                                if (enable_comments)
+                                    fprintf(out, "\t# $%lu = -$%lu\n", data->var, edata->var);
+                                if (var.size == CG_QWORD) {
+                                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
+                                    fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                                    copy = true;
+                                    qword = true;
+                                } else if (copy) {
+                                    if (var.size != CG_LONG)
+                                        fprintf(out, "\txorl %%eax, %%eax\n");
+                                    fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[var.size], var.offset, primary_registers[var.size]);
+                                } else
+                                    fprintf(out, "\tneg%c %lu(%%esp)\n", var_size_map[var.size], var.offset);
+                                if (copy)
+                                    fprintf(out, "\tneg%c %%%s\n", var_size_map[var.size], primary_registers[var.size]);
                                 break;
                             case CG_LOGIC_NOT: {
-                                fprintf(out, "\tcmp%c $0, %lu(%%esp)\n", var_size_map[map[edata->var].size], map[edata->var].offset);
+                                if (enable_comments)
+                                    fprintf(out, "\t# $%lu = !$%lu\n", data->var, edata->var);
+                                if (var.size == CG_QWORD) {
+                                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
+                                    fprintf(out, "\torl %lu(%%esp), %%edx\n", var.offset);
+                                    fprintf(out, "\tcmpl $0, %%eax\n");
+                                } else
+                                    fprintf(out, "\tcmp%c $0, %lu(%%esp)\n", var_size_map[var.size], var.offset);
                                 size_t skip = (*unique_id)++;
                                 fprintf(out, "\tje _%s$%lu\n", name, skip);
-                                size_t off = map[data->var].offset;
-                                fprintf(out, "\txor%c %lu(%%esp), %lu(%%esp)\n", var_size_map[map[data->var].size], off, off);
+                                fprintf(out, "\tmov%c $0, %lu(%%esp)\n", var_size_map[var.size], dest.offset);
+                                if (var.size == CG_QWORD)
+                                    fprintf(out, "\tmovl $0, %lu(%%esp)\n", dest.offset + 4);
                                 size_t end = (*unique_id)++;
                                 fprintf(out, "\tjmp _%s$%lu\n", name, end);
                                 fprintf(out, "_%s$%lu\n", name, skip);
-                                fprintf(out, "\tmov%c $1, %lu(%%esp)\n", var_size_map[map[data->var].size], off);
+                                if (var.size == CG_QWORD) {
+                                    fprintf(out, "\tmovl $0, %lu(%%esp)\n", dest.offset + 4);
+                                    fprintf(out, "\tmovl $0, %lu(%%esp)\n", dest.offset);
+                                } else
+                                    fprintf(out, "\tmov%c $1, %lu(%%esp)\n", var_size_map[var.size], var.offset);
                                 fprintf(out, "_%s$%lu\n", name, end);
+                                copy = false;
                                 break;
                             }
                             case CG_BITWISE_NOT:
-                                out_copy(edata->var, data->var, map, out);
-                                fprintf(out, "\tnot%c %lu(%%esp)\n", var_size_map[map[data->var].size], map[data->var].offset);
+                                if (enable_comments)
+                                    fprintf(out, "\t# $%lu = ~$%lu\n", data->var, edata->var);
+                                if (var.size == CG_QWORD) {
+                                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
+                                    fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                                    qword = true;
+                                } else if (copy) {
+                                    if (var.size != CG_LONG)
+                                        fprintf(out, "\txorl %%eax, %%eax\n");
+                                    fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[var.size], var.offset, primary_registers[var.size]);
+                                } else
+                                    fprintf(out, "\tnot%c %lu(%%esp)\n", var_size_map[var.size], var.offset);
+                                if (copy)
+                                    fprintf(out, "\tnot%c %%%s\n", var_size_map[var.size], primary_registers[var.size]);
                                 break;
                             case CG_DEREF: {
-                                size_t off = map[edata->var].offset;
-                                bool zero = false;
-                                const char *reg;
-                                switch (map[edata->var].size) {
-                                    case CG_BYTE:
-                                        zero = true;
-                                        reg = "al";
-                                        break;
-                                    case CG_WORD:
-                                        zero = true;
-                                        reg = "ax";
+                                if (enable_comments)
+                                    fprintf(out, "\t# $%lu = *$%lu\n", data->var, edata->var);
+                                switch (var.size) {
+                                    case CG_QWORD:
+                                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
+                                        qword = true;
                                         break;
                                     case CG_LONG:
-                                        reg = "eax";
+                                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset);
                                         break;
-                                    case CG_QWORD:
-                                        reg = "eax";
-                                        off += 4;
-                                        break;
+                                    default:
+                                        fprintf(out, "\txorl %%eax, %%eax\n");
+                                        fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[var.size], var.offset, primary_registers[var.size]);
                                 }
-                                if (zero)
-                                    fprintf(out, "\txorl %%eax, %%eax\n");
-                                fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[min(map[edata->var].size, CG_LONG)], off, reg);
-                                fprintf(out, "\tmov%c (%%eax), %lu(%%esp)\n", var_size_map[map[data->var].size], map[data->var].offset);
+                                fprintf(out, "\tmov%c 0(%%eax), %%%s\n", var_size_map[dest.size], primary_registers[dest.size]);
+                                if (dest.size == CG_QWORD) {
+                                    fprintf(out, "\tmovl 4(%%eax), %%eax\n");
+                                    qword = true;
+                                }
+                                copy = true;
                                 break;
                             }
                             case CG_ADDR: {
-                                size_t off = map[data->var].offset;
-                                const char *reg;
-                                switch (map[edata->var].size) {
-                                    case CG_BYTE:
-                                        reg = "al";
-                                        break;
-                                    case CG_WORD:
-                                        reg = "ax";
-                                        break;
-                                    case CG_LONG:
-                                        reg = "eax";
-                                        break;
-                                    case CG_QWORD:
-                                        fprintf(out, "\txorl %lu(%%esp), %lu(%%esp)\n", off, off);
-                                        off += 4;
-                                        break;
-                                }
-                                fprintf(out, "\tmovl %%esp, %%eax\n");
-                                fprintf(out, "\taddl $%lu, %%eax", off);
-                                fprintf(out, "\tmov%c %%%s, %lu(%%esp)\n", var_size_map[min(map[edata->var].size, CG_LONG)], reg, off);
+                                if (enable_comments)
+                                    fprintf(out, "\t# $%lu = &$%lu\n", data->var, edata->var);
+                                fprintf(out, "\tleal %lu(%%esp), %%eax\n", dest.offset);
+                                copy = true;
                                 break;
                             }
+                        }
+                        if (copy) {
+                            if (dest.size == CG_QWORD) {
+                                fprintf(out, "\tmovl %%eax, %lu(%%esp)\n", dest.offset + 4);
+                                fprintf(out, "\tmovl %s, %lu(%%esp)\n", qword ? "%eax" : "$0", dest.offset);
+                            } else
+                                fprintf(out, "\tmov%c %%%s, %lu(%%esp)\n", var_size_map[dest.size], primary_registers[dest.size], dest.offset);
                         }
                         break;
                     }
                     case CG_BINARY: {
                         struct cg_expression_binary *edata = &data->expr.data.binary;
+                        if (enable_comments)
+                            fprintf(out, "\t# $%lu = $%lu %s $%lu\n", data->var, edata->left_var, binary_operators[edata->type], edata->right_var);
                         struct var_ref dest = map[data->var];
                         struct var_ref left = map[edata->left_var];
                         struct var_ref right = map[edata->right_var];
                         if (left.size == CG_QWORD) {
                             fprintf(out, "\tmovl %lu(%%esp), %%eax\n", left.offset + 4);
                             fprintf(out, "\tmovl %lu(%%esp), %%edx\n", left.offset);
-                        } else
-                            fprintf(out, "\tmov%c %lu(%%esp), %%eax\n", var_size_map[left.size], left.offset);
+                        } else {
+                            if (left.size != CG_LONG)
+                                fprintf(out, "\txorl %%eax, %%eax\n");
+                            fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[left.size], left.offset, primary_registers[left.size]);
+                        }
                         if (right.size == CG_QWORD) {
-                            fprintf(out, "\tmovl %lu(%%esp, %%ebx\n", right.offset + 4);
+                            fprintf(out, "\tmovl %lu(%%esp), %%ebx\n", right.offset + 4);
                             fprintf(out, "\tmovl %lu(%%esp), %%ecx\n", right.offset);
-                        } else
-                            fprintf(out, "\tmov%c %lu(%%esp), %%ebx\n", var_size_map[right.size], right.offset);
+                        } else {
+                            if (right.size != CG_LONG)
+                                fprintf(out, "\txorl %%ebx, %%ebx\n");
+                            fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[right.size], right.offset, secondary_registers[right.size]);
+                        }
                         switch (edata->type) {
                             case CG_ADD:
                                 fprintf(out, "\taddl %%ebx, %%eax\n");
@@ -507,7 +636,7 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                     fprintf(out, "\tjne _%s$%lu\n", name, skip);
                                 }
                                 fprintf(out, "\tcmpl %%eax, %%ebx\n");
-                                fprintf(out, "\tjne_%s$%lu\n", name, skip);
+                                fprintf(out, "\tjne _%s$%lu\n", name, skip);
                                 fprintf(out, "\tmovl $1, %%eax\n");
                                 fprintf(out, "\tjmp _%s$%lu\n", name, end);
                                 fprintf(out, "_%s$%lu:\n", name, skip);
@@ -533,7 +662,7 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                     fprintf(out, "\tjne _%s$%lu\n", name, skip);
                                 }
                                 fprintf(out, "\tcmpl %%eax, %%ebx\n");
-                                fprintf(out, "\tjne_%s$%lu\n", name, skip);
+                                fprintf(out, "\tjne _%s$%lu\n", name, skip);
                                 fprintf(out, "\txorl %%eax, %%eax\n");
                                 fprintf(out, "\tjmp _%s$%lu\n", name, end);
                                 fprintf(out, "_%s$%lu:\n", name, skip);
@@ -544,37 +673,50 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                 break;
                             }
                         }
+                        if (dest.size == CG_QWORD) {
+                            fprintf(out, "\tmovl %%eax, %lu(%%esp)\n", dest.offset + 4);
+                            fprintf(out, "\tmovl %%edx, %lu(%%esp)\n", dest.offset);
+                        } else
+                            fprintf(out, "\tmov%c %%%s, %lu(%%esp)\n", var_size_map[dest.size], primary_registers[dest.size], dest.offset);
                         break;
                     }
                 }
-            }
-            case CG_CALL:
                 break;
-            case CG_ENDFUNC:
-                switch (map[stmt->data.endfunc.var].size) {
-                    case CG_VOID:
-                        break;
-                    case CG_BYTE:
-                        fprintf(out, "\txorl %%eax\n");
-                        fprintf(out, "\tmovb %lu(%%esp), %%al\n", map[stmt->data.endfunc.var].offset);
-                        break;
-                    case CG_WORD:
-                        fprintf(out, "\txorl %%eax\n");
-                        fprintf(out, "\tmovw %lu(%%esp), %%ax\n", map[stmt->data.endfunc.var].offset);
-                        break;
-                    case CG_LONG:
-                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", map[stmt->data.endfunc.var].offset);
-                        break;
-                    case CG_QWORD:
-                        if (function->return_type == CG_QWORD)
-                            fprintf(out, "\tmovl %lu(%%esp), %%edx\n", map[stmt->data.endfunc.var].offset);
-                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", map[stmt->data.endfunc.var].offset + 4);
-                        break;
+            }
+            case CG_CALL: {
+                struct cg_statement_call *data = &stmt->data.call;
+                if (enable_comments) {
+                    fprintf(out, "\t# $%lu = %s(", data->out, data->name);
+                    for (size_t j = 0; j < data->arg_count; ++j)
+                        fprintf(out, j ? ", $%lu" : "$%lu", data->args[j]);
+                    fprintf(out, ")\n");
+                }
+                fprintf(stderr, "Warning: statement #%lu is a call, which is not implemented yet!\n", i);
+                break;
+            }
+            case CG_ENDFUNC: {
+                struct cg_statement_endfunc *data = &stmt->data.endfunc;
+                if (enable_comments) {
+                    if (function->return_type)
+                        fprintf(out, "\t# return $%lu\n", data->var);
+                    else
+                        fprintf(out, "\t# return\n");
+                }
+                struct var_ref var = map[data->var];
+                if (var.size == CG_QWORD) {
+                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
+                    fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                } else {
+                    if (var.size != CG_LONG)
+                        fprintf(out, "\txorl %%eax, %%eax\n");
+                    fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[var.size], var.offset, primary_registers[var.size]);
                 }
                 fprintf(out, "\tjmp _%s$end\n", name);
                 break;
+            }
             case CG_CREATEVAR: {
-                size_t size = SIZE_CONVERT(stmt->data.createvar.size);
+                struct cg_statement_createvar *data = &stmt->data.createvar;
+                size_t size = SIZE_CONVERT(data->size);
                 size_t off = 0;
                 struct linked_list_node_t *node = *reverse;
                 size_t index = 0;
@@ -591,16 +733,21 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                     linked_list_foreach(reverse, (struct delegate_t) {.func = (void (*)(void *, void *)) &defragment, .state = &state});
                     off = state.offset;
                 }
-                linked_list_insert(reverse, index, &stmt->data.createvar.var, sizeof(size_t));
-                map[stmt->data.createvar.var] = (struct var_ref) {.offset = off, .size = stmt->data.createvar.size, .exists = true};
+                if (enable_comments)
+                    fprintf(out, "\t# %s $%lu @ %lu\n", var_size_names[data->size], data->var, off);
+                linked_list_insert(reverse, index, &data->var, sizeof(size_t));
+                map[data->var] = (struct var_ref) {.offset = off, .size = data->size, .exists = true};
                 break;
             }
             case CG_DESTROYVAR: {
-                map[stmt->data.destroyvar.var].exists = false;
+                struct cg_statement_destroyvar *data = &stmt->data.destroyvar;
+                if (enable_comments)
+                    fprintf(out, "\t# delete $%lu\n", data->var);
+                map[data->var].exists = false;
                 struct linked_list_node_t *node = *reverse;
                 size_t index = 0;
                 while (node) {
-                    if (*(size_t *) node->data == stmt->data.destroyvar.var)
+                    if (*(size_t *) node->data == data->var)
                         break;
                     node = node->ptr;
                     ++index;
@@ -612,8 +759,10 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
     }
 }
 
-void generate_code(struct cg_file_graph *graph, FILE *out) {
+void generate_code(struct cg_file_graph *graph, const char *filename, FILE *out) {
     size_t unique_id = 0;
+    if (filename)
+        fprintf(out, "\t.file \"%s\"\n", filename);
     fprintf(out, "\t.text\n");
     for (size_t i = 0; i < graph->function_count; ++i) {
         struct cg_function *f = &graph->functions[i];
@@ -625,6 +774,7 @@ void generate_code(struct cg_file_graph *graph, FILE *out) {
         struct var_ref *map = malloc(sizeof(struct var_ref) * var_count);
         linked_list_t *reverse = linked_list_create();
         size_t off = 0;
+        fprintf(out, "\tpushl %%ebx\n");
         fprintf(out, "\tpushl %%ebp\n");
         fprintf(out, "\tmovl %%esp, %%ebp\n");
         fprintf(out, "\tsubl $%lu, %%esp\n", stack_size);
@@ -639,6 +789,7 @@ void generate_code(struct cg_file_graph *graph, FILE *out) {
         free(map);
         fprintf(out, "_%s$end:\n", f->name);
         fprintf(out, "\tleave\n");
+        fprintf(out, "\tpopl %%ebx\n");
         fprintf(out, "\tret\n");
     }
 }

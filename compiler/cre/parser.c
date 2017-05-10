@@ -87,6 +87,8 @@ struct cre_parsed_file *parse(char *source) {
                             setFlag(token.filter, s[i], true);
                     }
                     break;
+                case '\0':
+                    continue;
                 default:
                     token.type = CRE_CHAR;
                     memset(token.filter, 0, sizeof(token.filter));
