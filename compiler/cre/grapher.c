@@ -25,32 +25,57 @@ static struct cg_block generate_return_value_block(struct cg_block_builder *pare
     return block;
 }
 
-static struct cg_block *generate_match_function(struct cre_token *tokens, size_t token_count) {
+static struct cg_block generate_char_token_block(struct cg_block_builder *parent, struct cg_block failure, char filter[]) {
+    char label[18];
+    struct cg_block_builder builder;
+    block_builder_create_child(&builder, parent);
+    sprintf(label, "_%lx", unique_id++);
+    size_t character = block_builder_create_variable(&builder, CG_BYTE), comparison = block_builder_create_variable(&builder, CG_BYTE);
+    block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = character, .expr = {.type = CG_UNARY, .data.unary = {.type = CG_DEREF, .var = 0}}}});
+    block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_JUMPIF, .data.jumpif = {.cond_var = character, .label = strdup(label)}});
+    block_builder_merge_block(&builder, failure);
+    block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_LABEL, .data.label.label = strdup(label)});
+    sprintf(label, "_%lx", unique_id++);
+    for (size_t i = 0; i < 256; ++i) {
+        if (getFlag(filter, i)) {
+            block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = comparison, .expr = {.type = CG_VALUE, .data.value.value = i}}});
+            block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = comparison, .expr = {.type = CG_BINARY, .data.binary = {.type = CG_EQ, .left_var = comparison, .right_var = character}}}});
+            block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_JUMPIF, .data.jumpif = {.cond_var = comparison, .label = strdup(label)}});
+        }
+    }
+    block_builder_destroy_variable(&builder, character);
+    block_builder_destroy_variable(&builder, comparison);
+    block_builder_merge_block(&builder, failure);
+    block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_LABEL, .data.label.label = strdup(label)});
+    struct cg_block block;
+    block_builder_end(&builder, &block);
+    return block;
+}
+
+static struct cg_block *generate_match_function(struct cre_token *tokens, size_t token_count, struct delegate_t add_func) {
     struct cg_block *result = NULL;
     struct cg_block_builder builder;
     block_builder_create_root(&builder, 1);
-    char label[18];
     for (size_t i = 0; i < token_count; ++i) {
+        char skipLabel[18];
+        bool skip = false;
         switch (tokens[i].type) {
             case CRE_CHAR: {
-                sprintf(label, "_%lx", unique_id++);
-                size_t character = block_builder_create_variable(&builder, CG_BYTE), comparison = block_builder_create_variable(&builder, CG_BYTE);
-                block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = character, .expr = {.type = CG_UNARY, .data.unary = {.type = CG_DEREF, .var = 0}}}});
-                block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_JUMPIF, .data.jumpif = {.cond_var = character, .label = strdup(label)}});
-                block_builder_merge_block(&builder, generate_return_value_block(&builder, 0, CG_BYTE));
-                block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_LABEL, .data.label.label = strdup(label)});
-                sprintf(label, "_%lx", unique_id++);
-                for (size_t j = 0; j < 256; ++j) {
-                    if (getFlag(tokens[i].filter, j)) {
-                        block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = comparison, .expr = {.type = CG_VALUE, .data.value.value = j}}});
-                        block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = comparison, .expr = {.type = CG_BINARY, .data.binary = {.type = CG_EQ, .left_var = comparison, .right_var = character}}}});
-                        block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_JUMPIF, .data.jumpif = {.cond_var = comparison, .label = strdup(label)}});
+                switch (tokens[i].mode) {
+                    case CRE_ONE:
+                        block_builder_merge_block(&builder, generate_char_token_block(&builder, generate_return_value_block(&builder, 0, CG_BYTE), tokens[i].filter));
+                        break;
+                    case CRE_MAYBE: {
+                        skip = true;
+                        sprintf(skipLabel, "_%lx", unique_id++);
+                        struct cg_block failure = {.statement_count = 1, .statements = malloc(sizeof(struct cg_statement))};
+                        *failure.statements = (struct cg_statement) {.type = CG_JUMP, .data.jump.label = strdup(skipLabel)};
+                        block_builder_merge_block(&builder, generate_char_token_block(&builder, failure, tokens[i].filter));
+                        break;
                     }
+                    case CRE_MULTIPLE:break;
+                    case CRE_MANY:break;
                 }
-                block_builder_destroy_variable(&builder, character);
-                block_builder_destroy_variable(&builder, comparison);
-                block_builder_merge_block(&builder, generate_return_value_block(&builder, 0, CG_BYTE));
-                block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_LABEL, .data.label.label = strdup(label)});
                 break;
             }
             case CRE_START:
@@ -64,6 +89,8 @@ static struct cg_block *generate_match_function(struct cre_token *tokens, size_t
             }
         }
         block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = 0, .expr = {.type = CG_UNARY, .data.unary = {.type = CG_PREINC, .var = 0}}}});
+        if (skip)
+            block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_LABEL, .data.label.label = strdup(skipLabel)});
     }
     block_builder_merge_block(&builder, generate_return_value_block(&builder, 1, CG_BYTE));
     end_token:
@@ -82,6 +109,10 @@ static void map_to_match_function(struct cg_function *out, struct cg_block *bloc
     out->body = *block;
 }
 
+static void add_function_internal(struct cg_function *function, linked_list_t *functions) {
+
+}
+
 struct cg_file_graph *graph(struct cre_parsed_file *file) {
     struct cg_file_graph *result = NULL;
     linked_list_t *functions = linked_list_create();
@@ -93,9 +124,8 @@ struct cg_file_graph *graph(struct cre_parsed_file *file) {
             if (!strcmp(attr->label, "match")) {
                 struct cg_function function;
                 if (!match)
-                    match = generate_match_function(expr->tokens, expr->token_count);
-                map_to_match_function(&function, match, attr->data, 0);
-                function.access_level = 1;
+                    match = generate_match_function(expr->tokens, expr->token_count, (struct delegate_t) {.func = (void (*)(void *, void *)) &add_function_internal, .state = functions});
+                map_to_match_function(&function, match, attr->data, 1);
                 linked_list_insert(functions, 0, &function, sizeof(struct cg_function));
             }
         }
