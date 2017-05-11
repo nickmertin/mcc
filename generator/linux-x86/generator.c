@@ -775,8 +775,6 @@ void generate_code(struct cg_file_graph *graph, const char *filename, FILE *out)
         linked_list_t *reverse = linked_list_create();
         size_t off = 0;
         fprintf(out, "\tpushl %%ebx\n");
-        fprintf(out, "\tpushl %%ebp\n");
-        fprintf(out, "\tmovl %%esp, %%ebp\n");
         fprintf(out, "\tsubl $%lu, %%esp\n", stack_size);
         for (size_t j = 0; j < f->arg_count; ++j) {
             map[j] = (struct var_ref) {.offset = off, .size = f->args[j], .exists = true};
@@ -788,7 +786,7 @@ void generate_code(struct cg_file_graph *graph, const char *filename, FILE *out)
         generate_block(f, &f->body, map, reverse, stack_size, &unique_id, f->name, out);
         free(map);
         fprintf(out, "_%s$end:\n", f->name);
-        fprintf(out, "\tleave\n");
+        fprintf(out, "\taddl $%lu, %%esp\n", stack_size);
         fprintf(out, "\tpopl %%ebx\n");
         fprintf(out, "\tret\n");
     }
