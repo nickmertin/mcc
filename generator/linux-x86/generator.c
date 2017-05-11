@@ -295,13 +295,13 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                     fprintf(out, "\tmovl $0, %lu(%%esp)\n", dest.offset + 4);
                                 size_t end = (*unique_id)++;
                                 fprintf(out, "\tjmp _%s$%lu\n", name, end);
-                                fprintf(out, "_%s$%lu\n", name, skip);
+                                fprintf(out, "_%s$%lu:\n", name, skip);
                                 if (var.size == CG_QWORD) {
                                     fprintf(out, "\tmovl $0, %lu(%%esp)\n", dest.offset + 4);
                                     fprintf(out, "\tmovl $0, %lu(%%esp)\n", dest.offset);
                                 } else
                                     fprintf(out, "\tmov%c $1, %lu(%%esp)\n", var_size_map[var.size], var.offset);
-                                fprintf(out, "_%s$%lu\n", name, end);
+                                fprintf(out, "_%s$%lu:\n", name, end);
                                 copy = false;
                                 break;
                             }
