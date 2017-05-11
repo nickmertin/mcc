@@ -17,7 +17,7 @@ struct cre_parsed_file *parse(char *source) {
             source += find->offset + find->info.length;
             free(find);
         }
-        while ((find = __regex_find("([a-zA-Z_]+)[ \t]*\\(([^()]*)\\)", line))) { //TODO: give up on __regex_find, use basic string processing instead
+        while ((find = __regex_find("([a-zA-Z_]+)[ \t]*\\(([^()]*)\\)", line))) {
             struct cre_attribute a = {.label = find->info.se[0], .data = find->info.se[1]};
             free(find);
             linked_list_insert(attributes, 0, &a, sizeof(struct cre_attribute));
@@ -30,6 +30,7 @@ struct cre_parsed_file *parse(char *source) {
         }
         const unsigned char *s = (const unsigned char *) find->info.se[1];
         linked_list_t *tokens = linked_list_create();
+        struct cre_token *lastToken = NULL;
         for (size_t i = 0; i < find->info.length; ++i) {
             struct cre_token token = {.mode = CRE_ONE, .lazy = false};
             switch (s[i]) {
@@ -43,7 +44,30 @@ struct cre_parsed_file *parse(char *source) {
                     token.type = CRE_CHAR;
                     memset(token.filter, 0xFF, sizeof(token.filter));
                     break;
-                case '[':
+                case '+':
+                    if (lastToken) {
+                        lastToken->mode = CRE_MULTIPLE;
+                        continue;
+                    }
+                    goto _default;
+                case '*':
+                    if (lastToken) {
+                        lastToken->mode = CRE_MANY;
+                        continue;
+                    }
+                    goto _default;
+                case '?':
+                    if (lastToken) {
+                        if (lastToken->mode == CRE_ONE)
+                            lastToken->mode = CRE_MAYBE;
+                        else {
+                            lastToken->lazy = true;
+                            lastToken = NULL;
+                        }
+                        continue;
+                    }
+                    goto _default;
+                case '[': {
                     token.type = CRE_CHAR;
                     bool flag = s[++i] != '^';
                     if (!flag)
@@ -55,18 +79,18 @@ struct cre_parsed_file *parse(char *source) {
                             setFlag(token.filter, last = s[++i], flag);
                         else if (s[i] == '-' && last) {
                             if (s[++i] > last)
-                                for (unsigned char c = last + 1; c <= s[i]; ++c)
+                                for (unsigned char c = (unsigned char) (last + 1); c <= s[i]; ++c)
                                     setFlag(token.filter, c, flag);
                             else
-                                for (unsigned char c = last - 1; c >= s[i]; --c)
+                                for (unsigned char c = (unsigned char) (last - 1); c >= s[i]; --c)
                                     setFlag(token.filter, c, flag);
                             last = 0;
-                        }
-                        else
+                        } else
                             setFlag(token.filter, last = s[i], flag);
                         ++i;
                     }
                     break;
+                }
                 case '\\':
                     token.type = CRE_CHAR;
                     memset(token.filter, 0, sizeof(token.filter));
@@ -90,12 +114,14 @@ struct cre_parsed_file *parse(char *source) {
                 case '\0':
                     continue;
                 default:
+                _default:
                     token.type = CRE_CHAR;
                     memset(token.filter, 0, sizeof(token.filter));
                     setFlag(token.filter, s[i], true);
                     break;
             }
             linked_list_insert(tokens, 0, &token, sizeof(struct cre_token));
+            lastToken = (struct cre_token *) (*tokens)->data;
         }
         struct cre_expression expr = {.token_count = linked_list_size(tokens), .attribute_count = linked_list_size(attributes)};
         linked_list_reverse(tokens);
@@ -114,7 +140,6 @@ struct cre_parsed_file *parse(char *source) {
     result->expression_count = linked_list_size(expressions);
     result->expressions = malloc(sizeof(struct cre_expression) * result->expression_count);
     copy_to_array(expressions, result->expressions, sizeof(struct cre_expression));
-    end:
     free(start);
     linked_list_destroy(expressions);
     return result;

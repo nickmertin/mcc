@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <memory.h>
+#include <stdint.h>
 
 enum cre_token_type {
     CRE_CHAR,
@@ -12,7 +13,7 @@ enum cre_token_type {
 
 enum cre_token_mode {
     CRE_ONE,
-    CRE_RANGE,
+    CRE_MAYBE,
     CRE_MULTIPLE,
     CRE_MANY,
 };
