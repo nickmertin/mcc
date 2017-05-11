@@ -13,24 +13,6 @@ static struct cg_block generate_jump_block(struct cg_block_builder *parent, char
     return block;
 }
 
-static struct cg_block generate_return_block(struct cg_block_builder *parent) {
-    struct cg_block_builder builder;
-    block_builder_create_child(&builder, parent);
-    block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ENDFUNC});
-    struct cg_block block;
-    block_builder_end(&builder, &block);
-    return block;
-}
-
-static struct cg_block generate_return_var_block(struct cg_block_builder *parent, size_t result_var) {
-    struct cg_block_builder builder;
-    block_builder_create_child(&builder, parent);
-    block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ENDFUNC, .data.endfunc.var = result_var});
-    struct cg_block block;
-    block_builder_end(&builder, &block);
-    return block;
-}
-
 static struct cg_block generate_return_value_block(struct cg_block_builder *parent, size_t result, enum cg_var_size size) {
     struct cg_block_builder builder;
     block_builder_create_child(&builder, parent);
@@ -50,10 +32,10 @@ static struct cg_block *generate_match_function(struct cre_token *tokens, size_t
     char label[18];
     for (size_t i = 0; i < token_count; ++i) {
         switch (tokens[i].type) {
-            case CRE_CHAR:
+            case CRE_CHAR: {
                 sprintf(label, "_%lx", unique_id++);
                 size_t character = block_builder_create_variable(&builder, CG_BYTE), comparison = block_builder_create_variable(&builder, CG_BYTE);
-                block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = character, .expr = {.type = CG_UNARY, .data.unary = {.var = 0, .type = CG_DEREF}}}});
+                block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = character, .expr = {.type = CG_UNARY, .data.unary = {.type = CG_DEREF, .var = 0}}}});
                 block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_JUMPIF, .data.jumpif = {.cond_var = character, .label = strdup(label)}});
                 block_builder_merge_block(&builder, generate_return_value_block(&builder, 0, CG_BYTE));
                 block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_LABEL, .data.label.label = strdup(label)});
@@ -70,10 +52,21 @@ static struct cg_block *generate_match_function(struct cre_token *tokens, size_t
                 block_builder_merge_block(&builder, generate_return_value_block(&builder, 0, CG_BYTE));
                 block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_LABEL, .data.label.label = strdup(label)});
                 break;
+            }
+            case CRE_START:
+                break;
+            case CRE_END: {
+                size_t out = block_builder_create_variable(&builder, CG_BYTE);
+                block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = out, .expr = {.type = CG_UNARY, .data.unary = {.type = CG_DEREF, .var = 0}}}});
+                block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = out, .expr = {.type = CG_UNARY, .data.unary = {.type = CG_LOGIC_NOT, .var = out}}}});
+                block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ENDFUNC, .data.endfunc.var = out});
+                goto end_token;
+            }
         }
-        block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = 0, .expr = {.type = CG_UNARY, .data.unary = {.type = CG_PREINC, .var = 0 }}}});
+        block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = 0, .expr = {.type = CG_UNARY, .data.unary = {.type = CG_PREINC, .var = 0}}}});
     }
     block_builder_merge_block(&builder, generate_return_value_block(&builder, 1, CG_BYTE));
+    end_token:
     result = malloc(sizeof(struct cg_block));
     block_builder_end(&builder, result);
     return result;
