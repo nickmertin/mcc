@@ -45,10 +45,10 @@ struct cre_parsed_file *parse(char *source) {
                     break;
                 case '[':
                     token.type = CRE_CHAR;
-                    bool flag = s[++i] == '^';
-                    if (flag)
+                    bool flag = s[++i] != '^';
+                    if (!flag)
                         ++i;
-                    memset(token.filter, flag ? 0xFF : 0, sizeof(token.filter));
+                    memset(token.filter, flag ? 0 : 0xFF, sizeof(token.filter));
                     unsigned char last = 0;
                     while (s[i] && s[i] != ']') {
                         if (s[i] == '\\')
