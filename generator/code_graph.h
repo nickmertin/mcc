@@ -128,6 +128,7 @@ struct cg_statement_call {
     size_t *args;
     size_t arg_count;
     size_t out;
+    enum cg_var_size out_size;
 };
 
 struct cg_statement_endfunc {
