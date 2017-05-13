@@ -691,7 +691,60 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                         fprintf(out, j ? ", $%lu" : "$%lu", data->args[j]);
                     fprintf(out, ")\n");
                 }
-                fprintf(stderr, "Warning: statement #%lu is a call, which is not implemented yet!\n", i);
+                size_t last_qword_reg = data->arg_count;
+                size_t qword_reg = 0;
+                size_t data_size = 0;
+                for (size_t j = 0; j < data->arg_count; ++j) {
+                    struct var_ref var = map[data->args[j]];
+                    if (var.size == CG_QWORD && qword_reg != 3) {
+                        fprintf(out, "\tmovq %lu(%%esp), %%mm%lu\n", var.offset, qword_reg++);
+                        if (qword_reg == 3)
+                            last_qword_reg = j;
+                    } else
+                        data_size += SIZE_CONVERT(var.size);
+                }
+                size_t off = max_stack_size % 16 == 8 ? 0 : (data_size + max_stack_size + 8) / 16 * 16 + 8 - max_stack_size - data_size;
+                if (off)
+                    fprintf(out, "\tsubl $%lu, %%esp\n", off);
+                for (size_t j = data->arg_count; j; ) {
+                    struct var_ref var = map[data->args[--j]];
+                    if (var.size == CG_QWORD && j <= last_qword_reg)
+                        continue;
+                    if (var.size < CG_LONG) {
+                        fprintf(out, "\txorl %%eax, %%eax\n");
+                        fprintf(out, "\tmov%c %lu(%%esp), %%%s\n", var_size_map[var.size], var.offset + off, primary_registers[var.size]);
+                        fprintf(out, "\tpushl %%esp\n");
+                    } else
+                        fprintf(out, "\tpushl %lu(%%esp)\n", var.offset + off);
+                    off += 4;
+                    if (var.size == CG_QWORD) {
+                        fprintf(out, "\tpushl %lu(%%esp)\n", var.offset + off + 4);
+                        off += 4;
+                    }
+                }
+                fprintf(out, "\tcall %s\n", data->name);
+                if (off)
+                    fprintf(out, "\taddl $%lu, %%esp\n", off);
+                struct var_ref out_var = map[data->out];
+                if (data->out_size) {
+                    if (out_var.size > data->out_size) {
+                        if (out_var.size == CG_QWORD) {
+                            fprintf(out, "\txorl %%edx, %%edx\n");
+                            fprintf(out, "\tmovl %%edx, %lu(%%esp)\n", out_var.offset);
+                            if (data->out_size == CG_LONG) {
+                                fprintf(out, "\tmovl %%eax, %lu(%%esp)\n", out_var.offset + 4);
+                                break;
+                            }
+                        }
+                        fprintf(out, "\txor%c %%%s, %%%s\n", var_size_map[out_var.size], secondary_registers[out_var.size], secondary_registers[out_var.size]);
+                        fprintf(out, "\tmov%c %%%s, %%%s\n", var_size_map[data->out_size], primary_registers[data->out_size], secondary_registers[data->out_size]);
+                        fprintf(out, "\tmov%c %%%s, %lu(%%esp)\n", var_size_map[out_var.size], secondary_registers[out_var.size], out_var.offset);
+                    } else {
+                        fprintf(out, "\tmov%c %%%s, %lu(%%esp)\n", var_size_map[out_var.size], primary_registers[out_var.size], out_var.offset);
+                        if (out_var.size == CG_QWORD)
+                            fprintf(out, "\tmovl %%eax, %lu(%%esp)\n", out_var.offset + 4);
+                    }
+                }
                 break;
             }
             case CG_ENDFUNC: {
@@ -788,6 +841,7 @@ void generate_code(struct cg_file_graph *graph, const char *filename, FILE *out)
         fprintf(out, "_%s$end:\n", f->name);
         fprintf(out, "\taddl $%lu, %%esp\n", stack_size);
         fprintf(out, "\tpopl %%ebx\n");
+        fprintf(out, "\temms\n");
         fprintf(out, "\tret\n");
     }
 }
