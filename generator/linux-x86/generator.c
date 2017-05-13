@@ -35,19 +35,18 @@ static size_t get_block_stack_size(struct cg_block *block, size_t initial_count,
         return 0;
     size_t *counts = malloc(sizeof(size_t) * block->statement_count);
     bzero(counts, sizeof(size_t) * block->statement_count);
-    enum cg_var_size *map = malloc(sizeof(enum cg_var_size) * block->statement_count);
-    bzero(map, sizeof(enum cg_var_size) * block->statement_count);
+    enum cg_var_size *map = malloc(sizeof(enum cg_var_size) * (block->max_var + 1));
+    bzero(map, sizeof(enum cg_var_size) * (block->max_var + 1));
     memcpy(map, initial_sizes, sizeof(enum cg_var_size) * initial_count);
-    size_t max_var = initial_count;
+    size_t max_var = max(initial_count, block->max_var);
     for (size_t i = 0; i < block->statement_count; ++i) {
         struct cg_statement *stmt = &block->statements[i];
         switch (stmt->type) {
             case CG_CREATEVAR:
                 map[stmt->data.createvar.var] = stmt->data.createvar.size;
-                max_var = max(max_var, stmt->data.createvar.var);
                 break;
             case CG_DESTROYVAR:
-                map[stmt->data.createvar.var] = CG_VOID;
+                map[stmt->data.destroyvar.var] = CG_VOID;
                 break;
             case CG_IFELSE: {
                 size_t max_var_1, max_var_2;
@@ -58,7 +57,7 @@ static size_t get_block_stack_size(struct cg_block *block, size_t initial_count,
                 break;
             }
         }
-        for (size_t j = 0; j < block->statement_count; ++j)
+        for (size_t j = 0; j <= block->max_var; ++j)
             counts[i] += SIZE_CONVERT(map[j]);
     }
     free(map);
