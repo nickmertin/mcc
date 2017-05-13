@@ -19,6 +19,7 @@ enum cg_var_size {
 struct cg_block {
     struct cg_statement *statements;
     size_t statement_count;
+    size_t max_var;
 };
 
 enum cg_expression_type {

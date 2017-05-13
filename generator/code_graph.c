@@ -12,7 +12,7 @@ void block_builder_end_internal(struct cg_statement *data, struct block_builder_
         if (!contains_size_t(state->processed, data->data.createvar.var))
             block_builder_destroy_variable(state->builder, data->data.createvar.var);
     } else if (data->type == CG_DESTROYVAR)
-        linked_list_insert(state->processed, 0, &data->data.createvar.var, sizeof(size_t));
+        linked_list_insert(state->processed, 0, &data->data.destroyvar.var, sizeof(size_t));
 }
 
 void block_builder_create_root(struct cg_block_builder *builder, size_t parameter_count) {
@@ -60,4 +60,8 @@ void block_builder_end(struct cg_block_builder *builder, struct cg_block *out) {
     out->statements = malloc(sizeof(struct cg_statement) * out->statement_count);
     copy_to_array(builder->statements, out->statements, sizeof(struct cg_statement));
     linked_list_destroy(builder->statements);
+    out->max_var = 0;
+    for (size_t i = 0; i < out->statement_count; ++i)
+        if (out->statements[i].type == CG_CREATEVAR && out->statements[i].data.createvar.var > out->max_var)
+            out->max_var = out->statements[i].data.createvar.var;
 }
