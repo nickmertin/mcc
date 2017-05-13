@@ -90,7 +90,6 @@ static struct cg_block *generate_match_function(struct cre_token *tokens, size_t
                         // Intentionally without break, as a multiple token is equivalent to a many token prefixed by a one token
                     case CRE_MANY:
                         if (inc) {
-                            inc = false;
                             struct cg_function function;
                             char name[23];
                             sprintf(name, "__cre_%lx", unique_id++);
@@ -140,10 +139,12 @@ static struct cg_block *generate_match_function(struct cre_token *tokens, size_t
                                 size_t comparison = block_builder_create_variable(&cont_builder, CG_BYTE);
                                 block_builder_add_statement(&cont_builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = comparison, .expr = {.type = CG_BINARY, .data.binary = {.type = CG_EQ, .left_var = 0, .right_var = starting_ptr}}}});
                                 block_builder_add_statement(&cont_builder, (struct cg_statement) {.type = CG_IFELSE, .data.ifelse = {.cond_var = comparison, .if_true = generate_return_value_block(&cont_builder, 0, CG_BYTE), .if_false = loop2_block}});
+                                block_builder_destroy_variable(&cont_builder, comparison);
                                 struct cg_block cont_block;
                                 block_builder_end(&cont_builder, &cont_block);
                                 block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_IFELSE, .data.ifelse = {.cond_var = next_stage_result, .if_true = generate_return_value_block(&builder, 1, CG_BYTE), .if_false = cont_block}});
                                 block_builder_destroy_variable(&builder, next_stage_result);
+                                block_builder_destroy_variable(&builder, starting_ptr);
                                 goto end_token;
                             }
                         } else if (!tokens[i].lazy) {
