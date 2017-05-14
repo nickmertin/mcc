@@ -5,6 +5,7 @@
 linked_list_t *linked_list_create() {
     linked_list_t *list = malloc(sizeof(linked_list_t));
     *list = NULL;
+    //fprintf(stderr, "Create %08llx\n", (unsigned long long) list);
     return list;
 }
 
@@ -93,5 +94,6 @@ void linked_list_destroy(linked_list_t *list) {
         node = node->ptr;
         free(c);
     }
-
+    //fprintf(stderr, "Destroy %08llx\n", (unsigned long long) list);
+    free(list);
 }
