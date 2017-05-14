@@ -33,7 +33,7 @@ static struct cg_block generate_char_token_block(struct cg_block_builder *parent
     size_t character = block_builder_create_variable(&builder, CG_BYTE), comparison = block_builder_create_variable(&builder, CG_BYTE);
     block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = character, .expr = {.type = CG_UNARY, .data.unary = {.type = CG_DEREF, .var = 0}}}});
     block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_JUMPIF, .data.jumpif = {.cond_var = character, .label = strdup(label)}});
-    block_builder_merge_block(&builder, generate_return_value_block(&builder, 0, CG_BYTE));
+    block_builder_merge_block(&builder, failure);
     block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_LABEL, .data.label.label = strdup(label)});
     sprintf(label, "_%lx", unique_id++);
     for (size_t i = 0; i < 256; ++i) {
@@ -135,10 +135,15 @@ static struct cg_block *generate_match_function(struct cre_token *tokens, size_t
                                 block_builder_add_statement(&builder, (struct cg_statement) {.type = CG_CALL, .data.call = {.name = strdup(name), .arg_count = 1, .args = args, .out = next_stage_result, .out_size = CG_BYTE}});
                                 struct cg_block_builder cont_builder;
                                 block_builder_create_child(&cont_builder, &builder);
-                                block_builder_add_statement(&cont_builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = 0, .expr = {.type = CG_UNARY, .data.unary = {.type = CG_PREDEC, .var = 0}}}});
                                 size_t comparison = block_builder_create_variable(&cont_builder, CG_BYTE);
                                 block_builder_add_statement(&cont_builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = comparison, .expr = {.type = CG_BINARY, .data.binary = {.type = CG_EQ, .left_var = 0, .right_var = starting_ptr}}}});
-                                block_builder_add_statement(&cont_builder, (struct cg_statement) {.type = CG_IFELSE, .data.ifelse = {.cond_var = comparison, .if_true = generate_return_value_block(&cont_builder, 0, CG_BYTE), .if_false = loop2_block}});
+                                struct cg_block_builder cont2_builder;
+                                block_builder_create_child(&cont2_builder, &cont_builder);
+                                block_builder_add_statement(&cont2_builder, (struct cg_statement) {.type = CG_ASSIGN, .data.assign = {.var = 0, .expr = {.type = CG_UNARY, .data.unary = {.type = CG_PREDEC, .var = 0}}}});
+                                block_builder_add_statement(&cont2_builder, (struct cg_statement) {.type = CG_JUMP, .data.jump.label = strdup(loop2)});
+                                struct cg_block cont2_block;
+                                block_builder_end(&cont2_builder, &cont2_block);
+                                block_builder_add_statement(&cont_builder, (struct cg_statement) {.type = CG_IFELSE, .data.ifelse = {.cond_var = comparison, .if_true = generate_return_value_block(&cont_builder, 0, CG_BYTE), .if_false = cont2_block}});
                                 block_builder_destroy_variable(&cont_builder, comparison);
                                 struct cg_block cont_block;
                                 block_builder_end(&cont_builder, &cont_block);
