@@ -108,8 +108,8 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                     fprintf(out, "\t# if $%lu then\n", data->cond_var);
                 struct var_ref var = map[data->cond_var];
                 if (var.size == CG_QWORD) {
-                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
-                    fprintf(out, "\torl %lu(%%esp), %%eax\n", var.offset);
+                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset);
+                    fprintf(out, "\torl %lu(%%esp), %%eax\n", var.offset + 4);
                     fprintf(out, "\tcmpl $0, %%eax\n");
                 } else
                     fprintf(out, "\tcmp%c $0, %lu(%%esp)\n", var_size_map[var.size], var.offset);
@@ -133,8 +133,8 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                     fprintf(out, "\t# if $%lu goto %s\n", data->cond_var, data->label);
                 struct var_ref var = map[data->cond_var];
                 if (var.size == CG_QWORD) {
-                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
-                    fprintf(out, "\torl %lu(%%esp), %%eax\n", var.offset);
+                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset);
+                    fprintf(out, "\torl %lu(%%esp), %%eax\n", var.offset + 4);
                     fprintf(out, "\tcmpl $0, %%eax\n");
                 } else
                     fprintf(out, "\tcmp%c $0, %lu(%%esp)\n", var_size_map[var.size], var.offset);
@@ -189,11 +189,11 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                     fprintf(out, "\t# $%lu = $%lu++\n", data->var, edata->var);
                                 if (var.size == CG_QWORD) {
                                     if (copy) {
-                                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
-                                        fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset);
+                                        fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset + 4);
                                     }
-                                    fprintf(out, "\taddl $1, %lu(%%esp)\n", var.offset + 4);
-                                    fprintf(out, "\tadcl $0, %lu(%%esp)\n", var.offset);
+                                    fprintf(out, "\taddl $1, %lu(%%esp)\n", var.offset);
+                                    fprintf(out, "\tadcl $0, %lu(%%esp)\n", var.offset + 4);
                                     qword = true;
                                 } else {
                                     if (copy) {
@@ -209,11 +209,11 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                     fprintf(out, "\t# $%lu = $%lu--\n", data->var, edata->var);
                                 if (var.size == CG_QWORD) {
                                     if (copy) {
-                                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
-                                        fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset);
+                                        fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset + 4);
                                     }
-                                    fprintf(out, "\tsubl $1, %lu(%%esp)\n", var.offset + 4);
-                                    fprintf(out, "\tsbbl $0, %lu(%%esp)\n", var.offset);
+                                    fprintf(out, "\tsubl $1, %lu(%%esp)\n", var.offset);
+                                    fprintf(out, "\tsbbl $0, %lu(%%esp)\n", var.offset + 4);
                                     qword = true;
                                 } else {
                                     if (copy) {
@@ -228,11 +228,11 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                 if (enable_comments)
                                     fprintf(out, "\t# $%lu = ++$%lu\n", data->var, edata->var);
                                 if (var.size == CG_QWORD) {
-                                    fprintf(out, "\taddl $1, %lu(%%esp)\n", var.offset + 4);
-                                    fprintf(out, "\tadcl $0, %lu(%%esp)\n", var.offset);
+                                    fprintf(out, "\taddl $1, %lu(%%esp)\n", var.offset);
+                                    fprintf(out, "\tadcl $0, %lu(%%esp)\n", var.offset + 4);
                                     if (copy) {
-                                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
-                                        fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                                        fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset);
+                                        fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset + 4);
                                     }
                                     qword = true;
                                 } else {
@@ -248,10 +248,10 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                 if (enable_comments)
                                     fprintf(out, "\t# $%lu = --$%lu\n", data->var, edata->var);
                                 if (var.size == CG_QWORD) {
-                                    fprintf(out, "\tsubl $1, %lu(%%esp)\n", var.offset + 4);
-                                    fprintf(out, "\tsbbl $0, %lu(%%esp)\n", var.offset);
-                                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
-                                    fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                                    fprintf(out, "\tsubl $1, %lu(%%esp)\n", var.offset);
+                                    fprintf(out, "\tsbbl $0, %lu(%%esp)\n", var.offset + 4);
+                                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset);
+                                    fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset + 4);
                                 } else {
                                     fprintf(out, "\tdec%c %lu(%%esp)\n", var_size_map[map[edata->var].size], map[edata->var].offset);
                                     if (copy) {
@@ -265,8 +265,8 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                 if (enable_comments)
                                     fprintf(out, "\t# $%lu = -$%lu\n", data->var, edata->var);
                                 if (var.size == CG_QWORD) {
-                                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
-                                    fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset);
+                                    fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset + 4);
                                     copy = true;
                                     qword = true;
                                 } else if (copy) {
@@ -282,8 +282,8 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                 if (enable_comments)
                                     fprintf(out, "\t# $%lu = !$%lu\n", data->var, edata->var);
                                 if (var.size == CG_QWORD) {
-                                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
-                                    fprintf(out, "\torl %lu(%%esp), %%edx\n", var.offset);
+                                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset);
+                                    fprintf(out, "\torl %lu(%%esp), %%edx\n", var.offset + 4);
                                     fprintf(out, "\tcmpl $0, %%eax\n");
                                 } else
                                     fprintf(out, "\tcmp%c $0, %lu(%%esp)\n", var_size_map[var.size], var.offset);
@@ -296,8 +296,8 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                 fprintf(out, "\tjmp _%s$%lu\n", name, end);
                                 fprintf(out, "_%s$%lu:\n", name, skip);
                                 if (var.size == CG_QWORD) {
-                                    fprintf(out, "\tmovl $0, %lu(%%esp)\n", dest.offset + 4);
                                     fprintf(out, "\tmovl $0, %lu(%%esp)\n", dest.offset);
+                                    fprintf(out, "\tmovl $0, %lu(%%esp)\n", dest.offset + 4);
                                 } else
                                     fprintf(out, "\tmov%c $1, %lu(%%esp)\n", var_size_map[var.size], var.offset);
                                 fprintf(out, "_%s$%lu:\n", name, end);
@@ -308,8 +308,8 @@ static void generate_block(struct cg_function *function, struct cg_block *block,
                                 if (enable_comments)
                                     fprintf(out, "\t# $%lu = ~$%lu\n", data->var, edata->var);
                                 if (var.size == CG_QWORD) {
-                                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset + 4);
-                                    fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset);
+                                    fprintf(out, "\tmovl %lu(%%esp), %%eax\n", var.offset);
+                                    fprintf(out, "\tmovl %lu(%%esp), %%edx\n", var.offset + 4);
                                     qword = true;
                                 } else if (copy) {
                                     if (var.size != CG_LONG)
